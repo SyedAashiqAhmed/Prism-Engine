@@ -133,6 +133,15 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
 
   /// Called by the notification listener to trigger a real-time UI update.
   Future<void> refresh() => load();
+
+  /// Deletes ALL transaction data from the local SQLite database.
+  /// Called from the dashboard's "Clear All Data" button (with confirmation).
+  Future<void> deleteAll() async {
+    final db = await DatabaseHelper.instance.database;
+    await db.delete('notifications');
+    // Reset to a clean empty state immediately.
+    state = const DashboardState(isLoading: false);
+  }
 }
 
 final dashboardProvider =

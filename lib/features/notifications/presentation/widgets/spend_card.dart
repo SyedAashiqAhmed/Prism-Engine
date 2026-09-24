@@ -5,6 +5,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../providers/dashboard_provider.dart';
 
 /// Reusable Credit / Debit summary card widget.
+/// Fixed: "Today" pill text now uses Flexible to prevent 28px right overflow
+/// on narrow screens when the formatted amount is long.
 class SpendCard extends ConsumerWidget {
   final bool isDebit;
 
@@ -20,12 +22,13 @@ class SpendCard extends ConsumerWidget {
     final containerColor =
         isDebit ? AppColors.debitContainer : AppColors.creditContainer;
     final label = isDebit ? 'Total Spent' : 'Total Received';
-    final todayLabel = isDebit ? 'Today spent' : 'Today received';
-    final icon = isDebit ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded;
+    final todayLabel = isDebit ? 'Today' : 'Today';
+    final icon =
+        isDebit ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded;
     final fmt = NumberFormat('#,##,##0.00', 'en_IN');
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
@@ -52,30 +55,34 @@ class SpendCard extends ConsumerWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
                   color: containerColor,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: color, size: 18),
+                child: Icon(icon, color: color, size: 16),
               ),
-              const SizedBox(width: 10),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textSecondary,
-                  letterSpacing: 0.2,
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondary,
+                    letterSpacing: 0.2,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           state.isLoading
               ? Container(
-                  height: 34,
-                  width: 140,
+                  height: 28,
+                  width: 100,
                   decoration: BoxDecoration(
                     color: AppColors.surfaceElevated,
                     borderRadius: BorderRadius.circular(8),
@@ -83,36 +90,50 @@ class SpendCard extends ConsumerWidget {
                 )
               : Text(
                   '₹${fmt.format(amount)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 26,
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: colorLight,
                     letterSpacing: -0.5,
                   ),
                 ),
           const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: containerColor,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.today_rounded, size: 12, color: colorLight),
-                const SizedBox(width: 4),
-                Text(
-                  state.isLoading
-                      ? '—'
-                      : '$todayLabel: ₹${fmt.format(todayAmount)}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: colorLight,
+          // ── "Today" pill ─────────────────────────────────────────────
+          // Wrapped in a LayoutBuilder so the pill never exceeds the card
+          // width and never causes a right-side overflow (was 28px).
+          LayoutBuilder(
+            builder: (_, constraints) => Container(
+              // Constrain pill to available card width
+              constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: containerColor,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.today_rounded, size: 11, color: colorLight),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      state.isLoading
+                          ? '—'
+                          : '$todayLabel: ₹${fmt.format(todayAmount)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: colorLight,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],

@@ -1,13 +1,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Permissions -->
+    <!-- ─── Permissions ────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Required for Android 13+ (API 33) to show foreground service notification -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Required for foreground service on Android 9+ (API 28+) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <!-- Required for foreground service type on Android 14+ (API 34+) -->
+    <!-- Required for Android 14+ (API 34) foreground service type -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    <!-- Required to keep the CPU running while service is active -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
     <application
         android:label="Prism Engine"
@@ -36,16 +39,39 @@
             </intent-filter>
         </activity>
 
-        <!-- Notification Listener Service Definition -->
+        <!-- ─── Notification Listener Service ────────────────────────────
+             IMPORTANT: The correct class name is NotificationsHandlerService
+             (NOT NotificationsListenerService). This is the class registered
+             by the flutter_notification_listener plugin that Android OS binds
+             to deliver notification events to our Dart callback.
+             foregroundServiceType="specialUse" is required on Android 14+ (API 34)
+        ─────────────────────────────────────────────────────────────────── -->
         <service
-            android:name="im.zoe.labs.flutter_notification_listener.NotificationsListenerService"
+            android:name="im.zoe.labs.flutter_notification_listener.NotificationsHandlerService"
             android:label="Prism Notification Service"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-            android:exported="true">
+            android:exported="true"
+            android:foregroundServiceType="specialUse">
+            <!-- Required for Android 14+ to declare WHY the foreground service type is specialUse -->
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="notification_listener"/>
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- ─── Reboot Broadcast Receiver ────────────────────────────────
+             Auto-restarts the notification listener service after device reboot.
+        ─────────────────────────────────────────────────────────────────── -->
+        <receiver
+            android:name="im.zoe.labs.flutter_notification_listener.RebootBroadcastReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

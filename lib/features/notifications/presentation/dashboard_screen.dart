@@ -89,10 +89,52 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     }
   }
 
+  /// Shows a confirmation dialog then deletes all transactions from SQLite.
+  Future<void> _clearAllData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceElevated,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Clear All Data?',
+          style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'This will permanently delete all captured transactions from the local database. This cannot be undone.',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete All', style: TextStyle(color: AppColors.debit, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      final messenger = ScaffoldMessenger.of(context);
+      await ref.read(dashboardProvider.notifier).deleteAll();
+      if (mounted) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('🗑️ All transaction data cleared.'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(dashboardProvider);
-    // Show error banner if dashboard failed to load
+    // Show error snackbar if dashboard DB load fails
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (state.errorMessage != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -110,14 +152,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _injectTestTransaction,
-        backgroundColor: AppColors.aiViolet,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.bug_report_rounded, size: 18),
-        label: const Text('Test ₹10', style: TextStyle(fontWeight: FontWeight.bold)),
-        tooltip: 'Inject a fake ₹10 DEBIT to test the dashboard pipeline',
-      ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(dashboardProvider.notifier).refresh(),
         color: AppColors.aiViolet,
@@ -186,13 +220,33 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                       const Spacer(),
                       // Live indicator
                       _LivePillWidget(),
-                      const SizedBox(width: 8),
+                      // Refresh
                       IconButton(
                         onPressed: () =>
                             ref.read(dashboardProvider.notifier).refresh(),
                         icon: const Icon(Icons.refresh_rounded,
-                            color: AppColors.textSecondary, size: 22),
-                        tooltip: 'Refresh',
+                            color: AppColors.textSecondary, size: 20),
+                        tooltip: 'Refresh data',
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      // Clear all data
+                      IconButton(
+                        onPressed: _clearAllData,
+                        icon: const Icon(Icons.delete_outline_rounded,
+                            color: AppColors.textSecondary, size: 20),
+                        tooltip: 'Clear all transaction data',
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      // Debug: inject test data
+                      IconButton(
+                        onPressed: _injectTestTransaction,
+                        icon: const Icon(Icons.bug_report_outlined,
+                            color: AppColors.textDisabled, size: 18),
+                        tooltip: 'Inject test transaction',
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
                       ),
                     ],
                   ),
@@ -389,34 +443,35 @@ class _EodSummaryBanner extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
+          // Each _EodItem is wrapped in Expanded so the three columns
+          // share available width equally — prevents overflow on small phones.
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _EodItem(
-                label: 'Spent today',
-                amount: state.todayDebits,
-                color: AppColors.debitLight,
-                prefix: '-',
+              Expanded(
+                child: _EodItem(
+                  label: 'Spent',
+                  amount: state.todayDebits,
+                  color: AppColors.debitLight,
+                  prefix: '-',
+                ),
               ),
-              Container(
-                  width: 1,
-                  height: 40,
-                  color: AppColors.glassBorder),
-              _EodItem(
-                label: 'Received today',
-                amount: state.todayCredits,
-                color: AppColors.creditLight,
-                prefix: '+',
+              Container(width: 1, height: 40, color: AppColors.glassBorder),
+              Expanded(
+                child: _EodItem(
+                  label: 'Received',
+                  amount: state.todayCredits,
+                  color: AppColors.creditLight,
+                  prefix: '+',
+                ),
               ),
-              Container(
-                  width: 1,
-                  height: 40,
-                  color: AppColors.glassBorder),
-              _EodItem(
-                label: 'Net flow',
-                amount: net.abs(),
-                color: isPositive ? AppColors.creditLight : AppColors.debitLight,
-                prefix: isPositive ? '+' : '-',
+              Container(width: 1, height: 40, color: AppColors.glassBorder),
+              Expanded(
+                child: _EodItem(
+                  label: 'Net',
+                  amount: net.abs(),
+                  color: isPositive ? AppColors.creditLight : AppColors.debitLight,
+                  prefix: isPositive ? '+' : '-',
+                ),
               ),
             ],
           ),
@@ -447,19 +502,26 @@ class _EodItem extends StatelessWidget {
       children: [
         Text(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             fontSize: 10,
             color: AppColors.textMuted,
             letterSpacing: 0.2,
           ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          '$prefix₹${fmt.format(amount)}',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-            color: color,
+        const SizedBox(height: 4),
+        // FittedBox shrinks font size if the amount is too large for the
+        // column — prevents overflow without truncating important digits.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            '$prefix₹${fmt.format(amount)}',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
         ),
       ],
