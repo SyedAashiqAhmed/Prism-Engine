@@ -4,6 +4,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Required for foreground service on Android 9+ (API 28+) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <!-- Required for foreground service type on Android 14+ (API 34+) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
 
     <application
         android:label="Prism Engine"

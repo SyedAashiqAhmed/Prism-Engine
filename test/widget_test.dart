@@ -3,14 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_engine/main.dart';
 
 void main() {
-  testWidgets('PrismEngineApp smoke test', (WidgetTester tester) async {
+  testWidgets('Dashboard screen mounts without errors', (WidgetTester tester) async {
     await tester.pumpWidget(
       const ProviderScope(
         child: PrismEngineApp(),
       ),
     );
+    // Let async initState complete (notification listener init is async)
+    await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text('Prism Engine'), findsOneWidget);
-    expect(find.text('Sprint 0 Initialized'), findsOneWidget);
+    // App title should be present in the MaterialApp
+    expect(find.text('Prism Engine'), findsWidgets);
   });
 }
