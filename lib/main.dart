@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:isolate';
 import 'dart:ui';
 
@@ -6,64 +7,54 @@ import 'package:flutter/services.dart';
 import 'package:flutter_notification_listener/flutter_notification_listener.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'core/database/database_helper.dart';
 import 'core/theme/app_theme.dart';
-import 'features/notifications/providers/dashboard_provider.dart';
 import 'features/notifications/presentation/dashboard_screen.dart';
-import 'features/notifications/services/axio_parser.dart';
-import 'features/notifications/services/dedup_service.dart';
+import 'features/notifications/providers/dashboard_provider.dart';
+import 'features/notifications/services/notification_processor.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Background Isolate Callback (GUARANTEED to run even when UI is closed)
-//
-// This is called by Android in a SEPARATE Dart isolate.
-// CANNOT access Flutter widgets, BuildContext, or Riverpod.
-// Only safe operations: SQLite writes, IsolateNameServer sends.
-//
-// @pragma('vm:entry-point') prevents tree-shaking in release builds.
-// ─────────────────────────────────────────────────────────────────────────────
+const _notificationAccessChannel = MethodChannel(
+  'com.prism.engine/notification_access',
+);
+
 @pragma('vm:entry-point')
-void _notificationCallback(NotificationEvent evt) {
-  // Forward to the UI isolate if it's running (non-null port = app is open).
-  final SendPort? sp =
-      IsolateNameServer.lookupPortByName('prism_bg_to_ui_port');
-  if (sp != null) {
-    sp.send(evt);
-  }
-  // Note: Background-only DB writes are NOT done here because sqflite
-  // requires the full Flutter engine. The UI isolate handles persistence.
-  // If you need background persistence without UI, use a platform channel
-  // with a native SQLite implementation instead.
+void _notificationCallback(NotificationEvent event) {
+  unawaited(() async {
+    try {
+      final processed = await NotificationProcessor.process(event);
+      if (processed) {
+        IsolateNameServer.lookupPortByName('prism_bg_to_ui_port')?.send(true);
+      }
+    } catch (error, stackTrace) {
+      // ignore: avoid_print
+      print(
+        '[NotificationListener] Failed to process notification: '
+        '$error\n$stackTrace',
+      );
+    }
+  }());
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// App Entry Point
-// ─────────────────────────────────────────────────────────────────────────────
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize plugin BEFORE runApp so the callback is registered
-  // before any notification events can arrive.
-  NotificationsListener.initialize(callbackHandle: _notificationCallback);
+  await NotificationsListener.initialize(callbackHandle: _notificationCallback);
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
 
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: Color(0xFF0B0E14),
-    systemNavigationBarIconBrightness: Brightness.light,
-  ));
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: Color(0xFF0B0E14),
+      systemNavigationBarIconBrightness: Brightness.light,
+    ),
+  );
 
   runApp(const ProviderScope(child: PrismEngineApp()));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Root App
-// ─────────────────────────────────────────────────────────────────────────────
 class PrismEngineApp extends StatelessWidget {
   const PrismEngineApp({super.key});
 
@@ -78,18 +69,6 @@ class PrismEngineApp extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Notification Listener Shell
-//
-// Architecture (per official plugin docs):
-//   1. Plugin background isolate → _notificationCallback (always runs)
-//   2. _notificationCallback → IsolateNameServer SendPort → ReceivePort here
-//   3. ReceivePort.listen() → _onNotificationEvent (parses, saves, refreshes UI)
-//
-// Additionally, the plugin's built-in receivePort is used as a fallback:
-//   NotificationsListener.receivePort.listen(_onNotificationEvent)
-//   This fires when the app IS in the foreground via the platform channel.
-// ─────────────────────────────────────────────────────────────────────────────
 class _NotificationListenerShell extends ConsumerStatefulWidget {
   const _NotificationListenerShell();
 
@@ -99,152 +78,82 @@ class _NotificationListenerShell extends ConsumerStatefulWidget {
 }
 
 class _NotificationListenerShellState
-    extends ConsumerState<_NotificationListenerShell> {
-  ReceivePort? _receivePort;
+    extends ConsumerState<_NotificationListenerShell>
+    with WidgetsBindingObserver {
+  static const _uiPortName = 'prism_bg_to_ui_port';
 
-  // ── Package allowlist ───────────────────────────────────────────────────
-  // Covers all major Indian bank SMS apps, UPI apps, and wallet apps.
-  // Bank SMS arrives via the device's default messaging app package.
-  static const Set<String> _allowedPackages = {
-    // Default SMS / Messaging apps (bank SMS arrives here)
-    'com.google.android.apps.messaging',  // Google Messages
-    'com.android.mms',                    // AOSP Messages
-    'com.samsung.android.messaging',      // Samsung Messages
-    'com.sonyericsson.conversations',     // Xperia Messages
-    'com.motorola.messaging',             // Motorola Messages
-    'com.oneplus.mms',                    // OnePlus Messages
-    'com.coloros.mms',                    // OPPO Messages
-    'com.miui.messaging',                 // Xiaomi MIUI Messages
-    'com.qti.qmmi',                       // Qualcomm SMS
-    'com.android.messaging',              // Generic Android Messages
-    // UPI Payment Apps
-    'com.google.android.apps.nbu.paisa.user', // Google Pay
-    'com.phonepe.app',                         // PhonePe
-    'net.one97.paytm',                         // Paytm
-    'in.org.npci.upiapp',                      // BHIM
-    'com.mobikwik_new',                        // MobiKwik
-    'com.freecharge.android',                  // FreeCharge
-    'com.amazon.mShop.android.shopping',       // Amazon Pay
-    'com.dreamplug.androidapp',                // CRED
-    // Bank Mobile Apps (push notifications)
-    'com.sbi.lotusintouch',                    // SBI YONO
-    'com.csam.icici.bank.imobile',             // ICICI iMobile
-    'com.snapwork.hdfc',                       // HDFC Mobile Banking
-    'com.axis.mobile',                         // Axis Mobile
-    'com.kotak.mahindra.kotak.mobile.banking', // Kotak
-    'com.idbi.mobilebanking',                  // IDBI
-    'com.pnb.mbanking',                        // PNB
-    'com.unionbank.ecom.mobile.android',       // Union Bank
-    'com.canarabank.mobility',                 // Canara Bank
-    'com.infrasoft.boi',                       // Bank of India
-    'com.rbl.bank.mobilebanking',              // RBL
-    'com.indusind.mobile',                     // IndusInd
-    'com.yesbank',                             // Yes Bank
-    'com.fbl',                                 // Federal Bank
-    'com.scb.breezebanking.in',                // Standard Chartered
-  };
+  ReceivePort? _receivePort;
+  bool _listenerReady = false;
+  bool _starting = false;
+  bool _permissionBannerShown = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _startListening();
   }
 
-  Future<void> _startListening() async {
-    // ── STEP 1: Check notification listener permission ─────────────────
-    final hasPermission = await NotificationsListener.hasPermission;
-    if (hasPermission != true) {
-      // Show permission banner after first frame is rendered
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _showPermissionBanner();
-      });
-      return; // Service cannot be started without permission
-    }
-
-    // ── STEP 2: Register named port for background isolate → UI comms ──
-    // Must be done BEFORE starting the service.
-    _receivePort = ReceivePort();
-    IsolateNameServer.removePortNameMapping('prism_bg_to_ui_port');
-    IsolateNameServer.registerPortWithName(
-        _receivePort!.sendPort, 'prism_bg_to_ui_port');
-
-    // ── STEP 3: Listen on the background-isolate bridge port ───────────
-    _receivePort!.listen((evt) {
-      if (evt is NotificationEvent) _onNotificationEvent(evt);
-    });
-
-    // ── STEP 4: Also listen on the plugin's built-in receivePort ───────
-    // This fires via platform channel when the app IS in foreground.
-    // Both listeners call the same handler so events are never missed.
-    NotificationsListener.receivePort?.listen((evt) {
-      if (evt is NotificationEvent) _onNotificationEvent(evt);
-    });
-
-    // ── STEP 5: Start the foreground service ────────────────────────────
-    final isRunning = await NotificationsListener.isRunning;
-    if (isRunning != true) {
-      await NotificationsListener.startService(
-        foreground: true,
-        title: 'Prism Engine',
-        description: 'Listening for bank & UPI notifications.',
-      );
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (!_listenerReady) {
+        _startListening();
+      } else {
+        ref.read(dashboardProvider.notifier).refresh();
+      }
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Main event processing pipeline
-  // Called for EVERY notification received from any source.
-  // ─────────────────────────────────────────────────────────────────────────
-  Future<void> _onNotificationEvent(NotificationEvent event) async {
-    final pkg = event.packageName ?? '';
-    final title = event.title ?? '';
-    final text = event.text ?? '';
+  Future<void> _startListening() async {
+    if (_starting || _listenerReady) return;
+    _starting = true;
+    try {
+      final hasPermission = await _notificationAccessChannel.invokeMethod<bool>(
+        'hasPermission',
+      );
+      if (!mounted) return;
+      if (hasPermission != true) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _showPermissionBanner();
+        });
+        return;
+      }
 
-    // ── 1. Package filter ─────────────────────────────────────────────
-    if (!_allowedPackages.contains(pkg)) return;
-    if (text.trim().isEmpty && title.trim().isEmpty) return;
+      if (_permissionBannerShown) {
+        ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+        _permissionBannerShown = false;
+      }
 
-    // ── 2. Parse financial data ────────────────────────────────────────
-    final parsed = AxioParser.parse(text, title: title);
-    if (parsed == null) return; // OTP, spam, or non-financial
+      _receivePort = ReceivePort();
+      IsolateNameServer.removePortNameMapping(_uiPortName);
+      IsolateNameServer.registerPortWithName(
+        _receivePort!.sendPort,
+        _uiPortName,
+      );
+      _receivePort!.listen((message) {
+        if (message == true && mounted) {
+          ref.read(dashboardProvider.notifier).refresh();
+        }
+      });
 
-    final now = DateTime.now().millisecondsSinceEpoch;
-
-    // ── 3. Deduplication (10-minute window) ────────────────────────────
-    // Prevents double-counting when both the UPI app AND bank SMS fire
-    // for the same transaction within 10 minutes of each other.
-    final isDup = await DedupService.isDuplicateAndReconcile(
-      amount: parsed.amount,
-      type: parsed.type,
-      timestamp: now,
-      merchant: parsed.merchant,
-    );
-    if (isDup) return;
-
-    // ── 4. Persist to SQLite ───────────────────────────────────────────
-    final sourceKey = '${pkg}_${parsed.type}_${parsed.amount}_$now';
-    await DatabaseHelper.instance.insertNotification({
-      'source_key': sourceKey,
-      'package_name': pkg,
-      'sender_header': null,
-      'title': title.isNotEmpty ? title : null,
-      'text': text,
-      'timestamp': now,
-      'category': 'Bank',
-      'merchant': parsed.merchant,
-      'amount': parsed.amount,
-      'txn_type': parsed.type,
-      'is_priority': 0,
-    });
-
-    // ── 5. Refresh dashboard UI ────────────────────────────────────────
-    if (mounted) {
-      ref.read(dashboardProvider.notifier).refresh();
+      // The native listener owns the foreground service and persists events
+      // directly, so the Dart plugin service does not need a second FGS.
+      await NotificationsListener.startService(
+        foreground: false,
+        title: 'Prism Engine',
+        description: 'Listening for bank & UPI notifications.',
+      );
+      await NotificationsListener.demoteToBackground();
+      _listenerReady = true;
+    } finally {
+      _starting = false;
     }
   }
 
   void _showPermissionBanner() {
-    if (!mounted) return;
+    if (!mounted || _permissionBannerShown) return;
+    _permissionBannerShown = true;
     ScaffoldMessenger.of(context).showMaterialBanner(
       MaterialBanner(
         backgroundColor: const Color(0xFF1E2430),
@@ -258,14 +167,8 @@ class _NotificationListenerShellState
         ),
         actions: [
           TextButton(
-            onPressed: () async {
-              await NotificationsListener.openPermissionSettings();
-              if (mounted) {
-                ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
-                // Re-try starting the listener after returning from settings
-                await _startListening();
-              }
-            },
+            onPressed: () =>
+                _notificationAccessChannel.invokeMethod<void>('openSettings'),
             child: const Text(
               'GRANT ACCESS',
               style: TextStyle(
@@ -281,8 +184,9 @@ class _NotificationListenerShellState
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _receivePort?.close();
-    IsolateNameServer.removePortNameMapping('prism_bg_to_ui_port');
+    IsolateNameServer.removePortNameMapping(_uiPortName);
     super.dispose();
   }
 

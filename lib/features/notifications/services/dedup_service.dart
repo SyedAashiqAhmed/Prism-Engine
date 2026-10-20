@@ -1,4 +1,5 @@
 import '../../../core/database/database_helper.dart';
+import 'package:sqflite/sqflite.dart';
 
 /// Service responsible for multi-channel deduplication and transaction reconciliation.
 /// Prevents duplicate counting when both a UPI app push notification (e.g. GPay/PhonePe)
@@ -18,9 +19,65 @@ class DedupService {
   }) async {
     final db = await DatabaseHelper.instance.database;
 
+    return db.transaction(
+      (txn) => _isDuplicateAndReconcile(
+        txn,
+        amount: amount,
+        type: type,
+        timestamp: timestamp,
+        merchant: merchant,
+        category: category,
+        windowMs: windowMs,
+      ),
+    );
+  }
+
+  /// Deduplicates and inserts atomically so simultaneous notification callbacks
+  /// cannot both pass the duplicate check and count the same transaction.
+  static Future<bool> insertIfUnique({
+    required Map<String, dynamic> row,
+    required double amount,
+    required String type,
+    required int timestamp,
+    String? merchant,
+    String category = 'Bank',
+    int windowMs = defaultWindowMs,
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+    return db.transaction((txn) async {
+      final isDuplicate = await _isDuplicateAndReconcile(
+        txn,
+        amount: amount,
+        type: type,
+        timestamp: timestamp,
+        merchant: merchant,
+        category: category,
+        windowMs: windowMs,
+      );
+      if (isDuplicate) return false;
+
+      await txn.insert(
+        'notifications',
+        row,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      return true;
+    });
+  }
+
+  static Future<bool> _isDuplicateAndReconcile(
+    DatabaseExecutor db, {
+    required double amount,
+    required String type,
+    required int timestamp,
+    required String? merchant,
+    required String category,
+    required int windowMs,
+  }) async {
     final existing = await db.query(
       'notifications',
-      where: 'category = ? AND txn_type = ? AND amount = ? AND timestamp BETWEEN ? AND ?',
+      where:
+          'category = ? AND txn_type = ? AND amount = ? AND timestamp BETWEEN ? AND ?',
       whereArgs: [
         category,
         type,

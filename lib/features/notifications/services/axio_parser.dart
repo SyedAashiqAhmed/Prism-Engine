@@ -24,8 +24,9 @@ class ParsedTxn {
 class AxioParser {
   static ParsedTxn? parse(String rawText, {String? title}) {
     // Combine title + text for full-context parsing.
-    final fullText =
-        title != null && title.isNotEmpty ? '$title $rawText' : rawText;
+    final fullText = title != null && title.isNotEmpty
+        ? '$title $rawText'
+        : rawText;
     final lower = fullText.toLowerCase();
 
     // ── 1. Blacklist: Skip OTPs, bill alerts, statements, promotional spam ──
@@ -39,21 +40,13 @@ class AxioParser {
         lower.contains('apply now') ||
         lower.contains('special offer') ||
         lower.contains('minimum due') ||
-        lower.contains('loan offer') ||
-        lower.contains('your reward') ||
-        lower.contains('cashback earned')) {
+        lower.contains('loan offer')) {
       return null;
     }
 
-    // ── 2. Erase Available Balance from FULL text FIRST ──────────────────
-    // Prevents "Avl Bal: Rs. 45,000" from being grabbed as the spend amount.
-    final textNoBal = fullText.replaceAll(
-      RegExp(
-        r'(?:avl\s*bal|available\s*balance|bal|balance|avbl|a\/c\s*bal(?:ance)?)\s*:?\s*(?:rs\.?|inr|₹)?\s*[\d,]+(?:\.\d{1,2})?',
-        caseSensitive: false,
-      ),
-      '',
-    );
+    // Remove balances and available limits so they cannot be mistaken for the
+    // transaction amount.
+    final textNoBal = _removeBalances(fullText);
 
     // ── 3. Extract Account / Card Last 4 Digits ───────────────────────────
     String? accountLast4;
@@ -72,6 +65,10 @@ class AxioParser {
     final merchantPatterns = [
       RegExp(
         r'(?:paid\s+to|transferred?\s+to|trf\s+to|sent\s+to)\s+([A-Za-z0-9][A-Za-z0-9\s&._-]{2,30}?)(?:\s+on\b|\s+ref\b|\s+upi\b|\s+avl\b|\s+dated\b|\s+via\b|\s*[,.]|$)',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'\bto\s+([A-Za-z0-9][A-Za-z0-9\s&._-]{2,30}?)(?:\s+at\b|\s+on\b|\s+ref\b|\s+upi\b|\s+avl\b|\s+dated\b|\s+via\b|\s*[,.]|$)',
         caseSensitive: false,
       ),
       RegExp(
@@ -103,94 +100,92 @@ class AxioParser {
       }
     }
 
-    // ── 5. DEBIT Check ────────────────────────────────────────────────────
-    // Handles patterns from HDFC, SBI, Axis, Kotak, GPay, PhonePe, Paytm, ICICI
-    //
-    // Patterns covered:
-    //   "debited with Rs. 5,000.00"
-    //   "debited by Rs 500"
-    //   "Rs. 5000 debited from"
-    //   "INR 5000.00 debited"
-    //   "₹5000 debited"
-    //   "deducted Rs 200"
-    //   "Paid Rs. 100 to"
-    //   "Payment of Rs 500"
-    //   "sent Rs 200"
-    //   "spent Rs. 1,200"
-    //   "withdrawn Rs 5000"
-    //   "transferred Rs. 2000"
-    //   "purchase of Rs 399"
-    final debitRegex = RegExp(
-      r'(?:'
-      // Pattern A: keyword THEN amount
-      r'(?:debited?\s*(?:with|by|for)?|deducted|withdrawn|sent|spent|paid|'
-      r'payment\s*of|purchase\s*(?:of)?|transferred?)\s*'
-      r'(?:rs\.?|inr|₹)?\s*([\d,]+(?:\.\d{1,2})?)'
-      r'|'
-      // Pattern B: amount THEN keyword
-      r'(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)\s*'
-      r'(?:debited?|deducted|spent|paid|withdrawn|transferred?)'
-      r')',
+    final rawTextNoBal = _removeBalances(rawText);
+    var debit = _findTransaction(
+      rawTextNoBal,
+      type: 'DEBIT',
+      keywords:
+          r'debit(?:ed)?|deducted|withdrawn|withdrawal|spent|paid|payment|purchase|sent|transfer(?:red)?|charged',
+    );
+    var credit = _findTransaction(
+      rawTextNoBal,
+      type: 'CREDIT',
+      keywords:
+          r'credit(?:ed)?(?!\s+card)|received|deposited|refund(?:ed)?|reversed?|added|cashback',
+    );
+
+    // Prefer explicit transaction wording in the notification body over a
+    // potentially generic or stale title such as "Debit alert".
+    if (debit == null && credit == null) {
+      debit = _findTransaction(
+        textNoBal,
+        type: 'DEBIT',
+        keywords:
+            r'debit(?:ed)?|deducted|withdrawn|withdrawal|spent|paid|payment|purchase|sent|transfer(?:red)?|charged',
+      );
+      credit = _findTransaction(
+        textNoBal,
+        type: 'CREDIT',
+        keywords:
+            r'credit(?:ed)?(?!\s+card)|received|deposited|refund(?:ed)?|reversed?|added|cashback',
+      );
+    }
+
+    if (debit == null && credit == null) return null;
+    if (debit != null && credit != null && debit.start == credit.start) {
+      return null;
+    }
+    final transaction = debit == null
+        ? credit!
+        : credit == null || debit.start < credit.start
+        ? debit
+        : credit;
+
+    return ParsedTxn(
+      type: transaction.type,
+      amount: transaction.amount,
+      merchant: merchant,
+      accountLast4: accountLast4,
+    );
+  }
+
+  static _TransactionMatch? _findTransaction(
+    String text, {
+    required String type,
+    required String keywords,
+  }) {
+    const amount = r'([\d,]+(?:\.\d{1,2})?)';
+    const currency = r'(?:rs\.?|inr|₹)\s*';
+    final amountAfterKeywordWithCurrency = RegExp(
+      '(?:\\b(?:$keywords)\\b)(?:\\s+[a-z0-9*/.-]+){0,8}?'
+      '\\s*$currency$amount',
+      caseSensitive: false,
+    );
+    final amountAfterKeywordWithoutCurrency = RegExp(
+      '(?:\\b(?:$keywords)\\b)\\s*(?:(?:of|by|for|with)\\s*)?$amount',
+      caseSensitive: false,
+    );
+    final amountBeforeKeyword = RegExp(
+      '(?:rs\\.?|inr|₹)\\s*$amount\\s+(?:(?:has|was|is)\\s+been\\s+)?'
+      '(?:successfully\\s+)?\\b(?:$keywords)\\b',
       caseSensitive: false,
     );
 
-    final debitMatch = debitRegex.firstMatch(textNoBal);
-    if (debitMatch != null) {
-      final amountStr = debitMatch.group(1) ?? debitMatch.group(2);
-      final amount = _cleanAmount(amountStr);
-      if (amount > 0) {
-        return ParsedTxn(
-          type: 'DEBIT',
-          amount: amount,
-          merchant: merchant,
-          accountLast4: accountLast4,
-        );
+    final matches = <_TransactionMatch>[];
+    for (final match in [
+      amountAfterKeywordWithCurrency.firstMatch(text),
+      amountAfterKeywordWithoutCurrency.firstMatch(text),
+      amountBeforeKeyword.firstMatch(text),
+    ]) {
+      if (match == null) continue;
+      final value = _cleanAmount(match.group(1));
+      if (value > 0) {
+        matches.add(_TransactionMatch(match.start, type, value));
       }
     }
-
-    // ── 6. CREDIT Check ───────────────────────────────────────────────────
-    // Handles patterns from all major Indian banks
-    //
-    // Patterns covered:
-    //   "credited with Rs. 5,000.00"
-    //   "credited by Rs 500"
-    //   "Rs. 5000 credited to"
-    //   "INR 5000.00 credited"
-    //   "₹5000 credited"
-    //   "received Rs 200"
-    //   "deposited Rs. 1,200"
-    //   "refunded Rs 399"
-    //   "reversed Rs 500"
-    //   "added Rs 1000"
-    //   "Congratulations! Rs. XXXX credited"   ← HDFC specific
-    final creditRegex = RegExp(
-      r'(?:'
-      // Pattern A: keyword THEN amount
-      r'(?:credited?\s*(?:with|by|for)?|received|deposited|refunded?|reversed?|added)\s*'
-      r'(?:rs\.?|inr|₹)?\s*([\d,]+(?:\.\d{1,2})?)'
-      r'|'
-      // Pattern B: amount THEN keyword
-      r'(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)\s*'
-      r'(?:credited?|received|deposited|refunded?|added)'
-      r')',
-      caseSensitive: false,
-    );
-
-    final creditMatch = creditRegex.firstMatch(textNoBal);
-    if (creditMatch != null) {
-      final amountStr = creditMatch.group(1) ?? creditMatch.group(2);
-      final amount = _cleanAmount(amountStr);
-      if (amount > 0) {
-        return ParsedTxn(
-          type: 'CREDIT',
-          amount: amount,
-          merchant: merchant,
-          accountLast4: accountLast4,
-        );
-      }
-    }
-
-    return null;
+    if (matches.isEmpty) return null;
+    matches.sort((a, b) => a.start.compareTo(b.start));
+    return matches.first;
   }
 
   static double _cleanAmount(String? raw) {
@@ -199,4 +194,22 @@ class AxioParser {
     final sanitized = raw.replaceAll(',', '').trim();
     return double.tryParse(sanitized) ?? 0.0;
   }
+
+  static String _removeBalances(String text) {
+    return text.replaceAll(
+      RegExp(
+        r'\b(?:avl\.?\s*(?:bal(?:ance)?|limit|credit)|available\s+(?:balance|limit|credit)|current\s+balance|closing\s+balance|a\/c\s*bal(?:ance)?|avbl|balance|bal)\b\s*:?\s*(?:rs\.?|inr|₹)?\s*[\d,]+(?:\.\d{1,2})?',
+        caseSensitive: false,
+      ),
+      '',
+    );
+  }
+}
+
+class _TransactionMatch {
+  final int start;
+  final String type;
+  final double amount;
+
+  const _TransactionMatch(this.start, this.type, this.amount);
 }
