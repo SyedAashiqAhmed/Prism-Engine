@@ -1,42 +1,17 @@
-import 'dart:async';
-import 'dart:isolate';
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_notification_listener/flutter_notification_listener.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/theme/app_theme.dart';
 import 'features/notifications/presentation/dashboard_screen.dart';
 import 'features/notifications/providers/dashboard_provider.dart';
-import 'features/notifications/services/notification_processor.dart';
 
 const _notificationAccessChannel = MethodChannel(
   'com.prism.engine/notification_access',
 );
 
-@pragma('vm:entry-point')
-void _notificationCallback(NotificationEvent event) {
-  unawaited(() async {
-    try {
-      final processed = await NotificationProcessor.process(event);
-      if (processed) {
-        IsolateNameServer.lookupPortByName('prism_bg_to_ui_port')?.send(true);
-      }
-    } catch (error, stackTrace) {
-      // ignore: avoid_print
-      print(
-        '[NotificationListener] Failed to process notification: '
-        '$error\n$stackTrace',
-      );
-    }
-  }());
-}
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await NotificationsListener.initialize(callbackHandle: _notificationCallback);
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -80,9 +55,6 @@ class _NotificationListenerShell extends ConsumerStatefulWidget {
 class _NotificationListenerShellState
     extends ConsumerState<_NotificationListenerShell>
     with WidgetsBindingObserver {
-  static const _uiPortName = 'prism_bg_to_ui_port';
-
-  ReceivePort? _receivePort;
   bool _listenerReady = false;
   bool _starting = false;
   bool _permissionBannerShown = false;
@@ -125,26 +97,6 @@ class _NotificationListenerShellState
         _permissionBannerShown = false;
       }
 
-      _receivePort = ReceivePort();
-      IsolateNameServer.removePortNameMapping(_uiPortName);
-      IsolateNameServer.registerPortWithName(
-        _receivePort!.sendPort,
-        _uiPortName,
-      );
-      _receivePort!.listen((message) {
-        if (message == true && mounted) {
-          ref.read(dashboardProvider.notifier).refresh();
-        }
-      });
-
-      // The native listener owns the foreground service and persists events
-      // directly, so the Dart plugin service does not need a second FGS.
-      await NotificationsListener.startService(
-        foreground: false,
-        title: 'Prism Engine',
-        description: 'Listening for bank & UPI notifications.',
-      );
-      await NotificationsListener.demoteToBackground();
       _listenerReady = true;
     } finally {
       _starting = false;
@@ -162,7 +114,7 @@ class _NotificationListenerShellState
           color: Color(0xFFF59E0B),
         ),
         content: const Text(
-          'Notification Access is required to capture bank & UPI transactions automatically.',
+          'Notification Access is required to classify and capture notifications.',
           style: TextStyle(color: Color(0xFFF8FAFC), fontSize: 13),
         ),
         actions: [
@@ -185,8 +137,6 @@ class _NotificationListenerShellState
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _receivePort?.close();
-    IsolateNameServer.removePortNameMapping(_uiPortName);
     super.dispose();
   }
 

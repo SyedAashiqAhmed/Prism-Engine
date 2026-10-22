@@ -1,0 +1,150 @@
+{
+  "version": "notification-pilot-v2",
+  "categories": [
+    {
+      "id": "placement_jobs",
+      "name": "Placement & Jobs",
+      "threshold": 0.22,
+      "description": "Job openings, internships, campus recruitment, eligibility, applications, assessments, interviews, shortlists, offers, and joining updates.",
+      "positiveExamples": [
+        "Campus hiring drive for software engineering graduates. Register by Friday.",
+        "We are recruiting interns for the summer program. Apply using the application form.",
+        "Your interview for the analyst role is scheduled for Monday at 10 AM.",
+        "You have been shortlisted for the next round of the recruitment selection process.",
+        "The next round of the hiring selection process is scheduled for Friday.",
+        "Congratulations, you have progressed to the next stage of our hiring process.",
+        "Your application has been selected for the second round of interviews.",
+        "You are shortlisted for further consideration for the open position.",
+        "Recruitment update: selected candidates will receive an assessment invitation.",
+        "We are pleased to invite you to interview for the software engineer position.",
+        "The shortlist for the summer internship has been released.",
+        "The recruiter will contact candidates moving forward in the selection process.",
+        "You have cleared the first interview round and are invited to the next round.",
+        "The recruitment assessment link is available for eligible candidates.",
+        "Shortlisted candidates for the campus placement drive are announced.",
+        "Students with a minimum CGPA of 7 are eligible to apply for this job opening.",
+        "Congratulations, you have received an offer letter and joining date.",
+        "The company is visiting campus for a hiring and placement drive."
+      ],
+      "negativeExamples": [
+        "Good morning everyone, have a nice day.",
+        "Funny joke, share this forward with all your friends.",
+        "Join our paid coaching course and buy a career preparation package.",
+        "The placement group should meet for lunch today.",
+        "Our team qualified for the next round of the football tournament.",
+        "The next round of the quiz competition starts at 4 PM.",
+        "The student council selection process begins next week.",
+        "Select the next round of drinks from the menu."
+      ]
+    },
+    {
+      "id": "banking_payments",
+      "name": "Banking & Payments",
+      "threshold": 0.42,
+      "description": "A transaction or payment status, including money sent or received, debit, credit, card or UPI payment, refund, reversal, or payment failure.",
+      "positiveExamples": [
+        "Rs 500 has been debited from your bank account for a UPI payment.",
+        "Your account has been credited with Rs 2500 from a transfer.",
+        "Payment of Rs 799 was received successfully from the customer.",
+        "Payment received for your electricity bill.",
+        "Your card payment was declined and the payment failed.",
+        "A refund of Rs 1200 has been processed to your original payment method.",
+        "You sent Rs 350 to the merchant using UPI.",
+        "Cashback of Rs 25 has been credited to your wallet.",
+        "The bank reversed the transaction and returned the money to your account."
+      ],
+      "negativeExamples": [
+        "Your one time password is 123456. Do not share the security code.",
+        "Special offer apply now for a pre approved loan and credit card.",
+        "Your available balance is Rs 5000.",
+        "Shop now and get a cashback offer on selected products."
+      ]
+    },
+    {
+      "id": "deliveries_orders",
+      "name": "Deliveries & Orders",
+      "threshold": 0.42,
+      "description": "Order confirmation, dispatch, tracking, delay, delivery, missed delivery, collection, cancellation, return, or fulfilment status.",
+      "positiveExamples": [
+        "Your order has been confirmed and is being prepared.",
+        "Your package has been dispatched and is out for delivery today.",
+        "Track your parcel using the shipment tracking link.",
+        "Your delivery is delayed and the new expected delivery date is tomorrow.",
+        "The courier could not deliver your package. Schedule another delivery.",
+        "Your order has been delivered and received at your address.",
+        "Your item was collected and the return is now in progress.",
+        "Your order has been cancelled and the shipment will not be sent."
+      ],
+      "negativeExamples": [
+        "Special shopping sale, buy now and get a discount.",
+        "Recommended products picked just for you.",
+        "This is a casual chat about ordering lunch sometime."
+      ]
+    },
+    {
+      "id": "bills_due_dates",
+      "name": "Bills & Due Dates",
+      "threshold": 0.42,
+      "description": "An invoice or bill is issued, an amount is due or overdue, or a bill payment deadline or reminder is stated.",
+      "positiveExamples": [
+        "Your electricity bill of Rs 1200 is due on Friday.",
+        "Payment received for your electricity bill.",
+        "The monthly water bill has been generated. Pay before the due date.",
+        "Your internet subscription invoice is ready for payment.",
+        "Reminder: your credit card bill payment is overdue.",
+        "Your phone bill is due tomorrow. Pay the outstanding amount.",
+        "The insurance premium payment deadline is approaching.",
+        "Your utility bill is available and the last date to pay is Monday.",
+        "A new invoice has been issued for your monthly subscription."
+      ],
+      "negativeExamples": [
+        "Payment received, thank you for your purchase.",
+        "Limited time offer, subscribe now to get a discount.",
+        "Good morning, hope everyone has a wonderful day."
+      ]
+    },
+    {
+      "id": "travel_transport",
+      "name": "Travel & Transport",
+      "threshold": 0.42,
+      "description": "A trip, ticket, ride, or transit booking is confirmed or changed, delayed, cancelled, boarding, or in progress.",
+      "positiveExamples": [
+        "Your train ticket booking is confirmed for tomorrow.",
+        "Your flight departure time has changed. Check the updated itinerary.",
+        "Your bus is delayed and the revised arrival time is 8 PM.",
+        "Your cab driver is arriving at the pickup location.",
+        "Boarding for your flight begins at gate 12.",
+        "Your ride has started and the driver is taking you to your destination.",
+        "The train platform has changed. Please board at platform three.",
+        "Your travel booking has been cancelled and the ticket refund is pending."
+      ],
+      "negativeExamples": [
+        "Travel sale, book a holiday package and save money.",
+        "I went on a trip last year and the photos were nice.",
+        "The cab company is hiring drivers. Apply for this job."
+      ]
+    },
+    {
+      "id": "appointments_reminders",
+      "name": "Appointments & Reminders",
+      "threshold": 0.42,
+      "description": "A non-job, non-travel appointment or meaningful scheduled reminder is created, changed, approaching, or cancelled.",
+      "positiveExamples": [
+        "Your doctor appointment is scheduled for Tuesday at 3 PM.",
+        "Reminder: your dental checkup is tomorrow morning.",
+        "Your service appointment has been confirmed for Friday.",
+        "The clinic changed your appointment time to 11 AM.",
+        "Your annual health checkup appointment is approaching.",
+        "Your appointment has been cancelled. Please reschedule a new time.",
+        "Reminder: your meeting with the counselor starts in 30 minutes.",
+        "Your home appliance repair visit is booked for Monday."
+      ],
+      "negativeExamples": [
+        "Your job interview is scheduled for tomorrow at 10 AM.",
+        "Your flight boarding starts at gate 12 at 10 AM.",
+        "Your electricity bill payment is due tomorrow.",
+        "Good morning, see you sometime soon."
+      ]
+    }
+  ]
+}

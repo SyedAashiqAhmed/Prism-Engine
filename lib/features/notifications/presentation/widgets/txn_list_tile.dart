@@ -12,15 +12,17 @@ class TxnListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDebit = (row['txn_type'] as String?) == 'DEBIT';
     final amount = (row['amount'] as num?)?.toDouble() ?? 0.0;
-    final merchant = (row['merchant'] as String?) ??
+    final merchant =
+        (row['merchant'] as String?) ??
         (row['title'] as String?) ??
         'Transaction';
     final timestamp = row['timestamp'] as int? ?? 0;
     final dt = DateTime.fromMillisecondsSinceEpoch(timestamp);
     final color = isDebit ? AppColors.debit : AppColors.credit;
     final colorLight = isDebit ? AppColors.debitLight : AppColors.creditLight;
-    final containerColor =
-        isDebit ? AppColors.debitContainer : AppColors.creditContainer;
+    final containerColor = isDebit
+        ? AppColors.debitContainer
+        : AppColors.creditContainer;
     final icon = isDebit
         ? Icons.arrow_upward_rounded
         : Icons.arrow_downward_rounded;
@@ -36,7 +38,9 @@ class TxnListTile extends StatelessWidget {
     } else if (diff == 1) {
       dateLabel = 'Yesterday, ${DateFormat('h:mm a').format(dt)}';
     } else if (diff < 7) {
-      dateLabel = DateFormat('EEEE, h:mm a').format(dt); // e.g. "Monday, 3:45 PM"
+      dateLabel = DateFormat(
+        'EEEE, h:mm a',
+      ).format(dt); // e.g. "Monday, 3:45 PM"
     } else {
       dateLabel = DateFormat('d MMM, h:mm a').format(dt);
     }
@@ -44,22 +48,23 @@ class TxnListTile extends StatelessWidget {
     final fmt = NumberFormat('#,##,##0.00', 'en_IN');
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      margin: const EdgeInsets.only(bottom: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.glassBorder, width: 1),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: AppColors.glassBorder),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(9),
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
               color: containerColor,
-              borderRadius: BorderRadius.circular(12),
+              shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: color, size: 16),
+            child: Icon(icon, color: color, size: 17),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -72,7 +77,7 @@ class TxnListTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
-                    fontSize: 14,
+                    fontSize: 13,
                     color: AppColors.textPrimary,
                   ),
                 ),
@@ -100,8 +105,7 @@ class TxnListTile extends StatelessWidget {
               ),
               Container(
                 margin: const EdgeInsets.only(top: 3),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: containerColor,
                   borderRadius: BorderRadius.circular(6),

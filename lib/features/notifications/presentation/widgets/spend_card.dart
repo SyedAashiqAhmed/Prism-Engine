@@ -18,34 +18,38 @@ class SpendCard extends ConsumerWidget {
     final amount = isDebit ? state.monthlyDebits : state.monthlyCredits;
     final todayAmount = isDebit ? state.todayDebits : state.todayCredits;
     final color = isDebit ? AppColors.debit : AppColors.credit;
-    final colorLight = isDebit ? AppColors.debitLight : AppColors.creditLight;
-    final containerColor =
-        isDebit ? AppColors.debitContainer : AppColors.creditContainer;
+    final containerColor = isDebit
+        ? AppColors.debitContainer
+        : AppColors.creditContainer;
+    final cardColors = isDebit
+        ? const [Color(0xFF30151A), Color(0xFF1B1114)]
+        : const [Color(0xFF00E599), Color(0xFF00C982)];
+    final foregroundColor = isDebit
+        ? AppColors.debitLight
+        : const Color(0xFF062017);
     final label = isDebit ? 'Total Spent' : 'Total Received';
     final todayLabel = isDebit ? 'Today' : 'Today';
-    final icon =
-        isDebit ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded;
+    final icon = isDebit
+        ? Icons.arrow_upward_rounded
+        : Icons.arrow_downward_rounded;
     final fmt = NumberFormat('#,##,##0.00', 'en_IN');
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withAlpha(60), width: 1),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withAlpha(isDebit ? 85 : 0), width: 1),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppColors.surface,
-            containerColor.withAlpha(40),
-          ],
+          colors: cardColors,
         ),
         boxShadow: [
           BoxShadow(
-            color: color.withAlpha(20),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+            color: color.withAlpha(24),
+            blurRadius: 18,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -57,10 +61,10 @@ class SpendCard extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
-                  color: containerColor,
+                  color: isDebit ? containerColor : Colors.black.withAlpha(25),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: color, size: 16),
+                child: Icon(icon, color: foregroundColor, size: 16),
               ),
               const SizedBox(width: 8),
               Flexible(
@@ -71,7 +75,7 @@ class SpendCard extends ConsumerWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: AppColors.textSecondary,
+                    color: foregroundColor.withAlpha(210),
                     letterSpacing: 0.2,
                   ),
                 ),
@@ -95,7 +99,7 @@ class SpendCard extends ConsumerWidget {
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: colorLight,
+                    color: foregroundColor,
                     letterSpacing: -0.5,
                   ),
                 ),
@@ -107,16 +111,15 @@ class SpendCard extends ConsumerWidget {
             builder: (_, constraints) => Container(
               // Constrain pill to available card width
               constraints: BoxConstraints(maxWidth: constraints.maxWidth),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: containerColor,
+                color: isDebit ? containerColor : Colors.black.withAlpha(25),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.today_rounded, size: 11, color: colorLight),
+                  Icon(Icons.today_rounded, size: 11, color: foregroundColor),
                   const SizedBox(width: 4),
                   Flexible(
                     child: Text(
@@ -128,7 +131,7 @@ class SpendCard extends ConsumerWidget {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
-                        color: colorLight,
+                        color: foregroundColor,
                       ),
                     ),
                   ),

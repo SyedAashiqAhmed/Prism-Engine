@@ -13,13 +13,20 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import org.json.JSONArray
+import org.json.JSONObject
+import java.security.MessageDigest
 import java.util.Locale
 
 class PrismNotificationListenerService : NotificationListenerService() {
     private lateinit var transactionStore: TransactionStore
+    private lateinit var classifier: NotificationClassifier
 
     override fun onCreate() {
         super.onCreate()
+        classifier = assets.open(CATEGORY_CONFIG_ASSET).bufferedReader().use {
+            NotificationClassifier.fromJson(it.readText())
+        }
         transactionStore = TransactionStore(this)
         startListenerForeground()
     }
@@ -36,21 +43,26 @@ class PrismNotificationListenerService : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        if (sbn.packageName == packageName ||
+            sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0 ||
+            sbn.notification.flags and Notification.FLAG_ONGOING_EVENT != 0
+        ) {
+            return
+        }
         val extras = sbn.notification.extras
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
-        val body = buildString {
-            append(extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString().orEmpty())
-            if (isBlank()) {
-                append(extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty())
-            }
+        val bodyParts = buildList {
+            val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
+            val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+            val primaryText = bigText?.takeIf { it.isNotBlank() }
+                ?: text?.takeIf { it.isNotBlank() }
+            if (primaryText != null) add(primaryText)
             val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
             lines?.forEach { line ->
-                if (!line.isNullOrBlank() && !contains(line)) {
-                    if (isNotEmpty()) append('\n')
-                    append(line)
-                }
+                if (!line.isNullOrBlank() && line.toString() !in this) add(line.toString())
             }
         }
+        val body = bodyParts.joinToString("\n")
         if (title.isBlank() && body.isBlank()) return
 
         try {
@@ -60,9 +72,10 @@ class PrismNotificationListenerService : NotificationListenerService() {
                 title = title,
                 body = body,
                 timestamp = sbn.postTime,
+                classifier = classifier,
             )
             if (saved) {
-                Log.i(TAG, "Captured ${sbn.packageName} transaction")
+                Log.i(TAG, "Captured notification from ${sbn.packageName}")
             }
         } catch (error: Exception) {
             Log.e(TAG, "Could not persist notification from ${sbn.packageName}", error)
@@ -76,7 +89,7 @@ class PrismNotificationListenerService : NotificationListenerService() {
             manager.createNotificationChannel(
                 NotificationChannel(
                     channelId,
-                    "Transaction listener",
+                    "Notification listener",
                     NotificationManager.IMPORTANCE_LOW,
                 ),
             )
@@ -85,7 +98,7 @@ class PrismNotificationListenerService : NotificationListenerService() {
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(applicationInfo.icon)
             .setContentTitle("Prism Engine is listening")
-            .setContentText("Bank and payment notifications are processed in the background.")
+            .setContentText("Notifications are classified and saved in the background.")
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setOngoing(true)
             .setShowWhen(false)
@@ -120,7 +133,11 @@ class PrismNotificationListenerService : NotificationListenerService() {
                     merchant TEXT,
                     amount REAL,
                     txn_type TEXT,
-                    is_priority INTEGER DEFAULT 0
+                    is_priority INTEGER DEFAULT 0,
+                    category_labels TEXT NOT NULL DEFAULT '[]',
+                    classification_scores TEXT NOT NULL DEFAULT '{}',
+                    classification_version TEXT,
+                    classification_confidence REAL
                 )
                 """.trimIndent(),
             )
@@ -135,7 +152,34 @@ class PrismNotificationListenerService : NotificationListenerService() {
             )
         }
 
-        override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+        override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+            ensureClassificationColumns(db)
+        }
+
+        override fun onOpen(db: SQLiteDatabase) {
+            super.onOpen(db)
+            ensureClassificationColumns(db)
+        }
+
+        private fun ensureClassificationColumns(db: SQLiteDatabase) {
+            val existing = mutableSetOf<String>()
+            db.rawQuery("PRAGMA table_info(notifications)", null).use { cursor ->
+                val nameColumn = cursor.getColumnIndex("name")
+                while (cursor.moveToNext()) existing += cursor.getString(nameColumn)
+            }
+            val columns = listOf(
+                "category_labels TEXT NOT NULL DEFAULT '[]'",
+                "classification_scores TEXT NOT NULL DEFAULT '{}'",
+                "classification_version TEXT",
+                "classification_confidence REAL",
+            )
+            columns.forEach { definition ->
+                val name = definition.substringBefore(' ')
+                if (name !in existing) {
+                    db.execSQL("ALTER TABLE notifications ADD COLUMN $definition")
+                }
+            }
+        }
 
         fun save(
             packageName: String,
@@ -143,32 +187,62 @@ class PrismNotificationListenerService : NotificationListenerService() {
             title: String,
             body: String,
             timestamp: Long,
+            classifier: NotificationClassifier,
         ): Boolean {
-            val parsed = TransactionParser.parse(title, body) ?: return false
+            val message = body
+            val classification = classifier.classify(message)
+            val transaction = TransactionParser.parse(title, body)
+            val categories = classification.labels.toMutableList()
+            if (transaction != null) {
+                val bankingMatch = CategoryMatch(
+                    id = BANKING_CATEGORY_ID,
+                    name = BANKING_CATEGORY_NAME,
+                    score = 1.0,
+                    threshold = 1.0,
+                )
+                val bankingIndex = categories.indexOfFirst {
+                    it.id == BANKING_CATEGORY_ID
+                }
+                if (bankingIndex < 0) {
+                    categories += bankingMatch
+                } else {
+                    categories[bankingIndex] = bankingMatch
+                }
+            }
+            categories.sortByDescending { it.score }
+            val categoryLabels = JSONArray().apply {
+                categories.forEach { put(it.name) }
+            }.toString()
+            val scores = JSONObject().apply {
+                classification.scores.forEach { (id, score) -> put(id, score) }
+                transaction?.let { put(BANKING_CATEGORY_ID, 1.0) }
+            }.toString()
+            val primaryCategory = categories.firstOrNull()?.name ?: UNCLASSIFIED_CATEGORY
             val database = writableDatabase
             database.beginTransaction()
             try {
                 val duplicate = database.rawQuery(
                     """
                     SELECT id, merchant FROM notifications
-                    WHERE category = ? AND txn_type = ? AND amount = ?
+                    WHERE category IN (?, ?) AND txn_type = ? AND amount = ?
                       AND timestamp BETWEEN ? AND ?
                     LIMIT 1
                     """.trimIndent(),
                     arrayOf(
-                        CATEGORY,
-                        parsed.type,
-                        parsed.amount.toString(),
+                        LEGACY_BANK_CATEGORY,
+                        BANKING_CATEGORY_NAME,
+                        transaction?.type ?: "",
+                        transaction?.amount?.toString() ?: "",
                         (timestamp - DEDUP_WINDOW_MS).toString(),
                         (timestamp + DEDUP_WINDOW_MS).toString(),
                     ),
                 ).use { cursor ->
-                    if (cursor.moveToFirst()) {
+                    if (transaction != null && cursor.moveToFirst()) {
                         val existingMerchant = cursor.getString(1)
-                        if (existingMerchant.isNullOrBlank() && !parsed.merchant.isNullOrBlank()) {
+                        if (existingMerchant.isNullOrBlank() && !transaction.merchant.isNullOrBlank()) {
                             database.execSQL(
                                 "UPDATE notifications SET merchant = ? WHERE id = ?",
-                                arrayOf(parsed.merchant, cursor.getLong(0)),
+                                arrayOf<Any?>(transaction.merchant, cursor.getLong(0)),
                             )
                         }
                         true
@@ -182,24 +256,33 @@ class PrismNotificationListenerService : NotificationListenerService() {
                     return false
                 }
 
-                val sourceKey = "${packageName}_${notificationKey}_${timestamp}_${parsed.type}_${parsed.amount}"
+                val contentHash = MessageDigest.getInstance("SHA-256")
+                    .digest(message.trim().lowercase(Locale.ROOT).toByteArray())
+                    .joinToString("") { "%02x".format(it) }
+                val sourceKey = "${packageName}_${notificationKey}_$contentHash"
                 database.execSQL(
                     """
                     INSERT OR IGNORE INTO notifications
                     (source_key, package_name, sender_header, title, text, timestamp,
-                     category, merchant, amount, txn_type, is_priority)
-                    VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 0)
+                     category, merchant, amount, txn_type, is_priority,
+                     category_labels, classification_scores, classification_version,
+                     classification_confidence)
+                    VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
                     """.trimIndent(),
-                    arrayOf(
+                    arrayOf<Any?>(
                         sourceKey,
                         packageName,
                         title.ifBlank { null },
                         body,
                         timestamp,
-                        CATEGORY,
-                        parsed.merchant,
-                        parsed.amount,
-                        parsed.type,
+                        primaryCategory,
+                        transaction?.merchant,
+                        transaction?.amount,
+                        transaction?.type,
+                        categoryLabels,
+                        scores,
+                        classification.modelVersion,
+                        categories.firstOrNull()?.score,
                     ),
                 )
                 database.setTransactionSuccessful()
@@ -211,8 +294,9 @@ class PrismNotificationListenerService : NotificationListenerService() {
 
         companion object {
             private const val DATABASE_NAME = "prism_engine.db"
-            private const val DATABASE_VERSION = 1
-            private const val CATEGORY = "Bank"
+            private const val DATABASE_VERSION = 2
+            private const val LEGACY_BANK_CATEGORY = "Bank"
+            private const val BANKING_CATEGORY_NAME = "Banking & Payments"
             private const val DEDUP_WINDOW_MS = 10 * 60 * 1000L
         }
     }
@@ -288,5 +372,10 @@ class PrismNotificationListenerService : NotificationListenerService() {
     companion object {
         private const val TAG = "PrismNotificationListener"
         private const val FOREGROUND_NOTIFICATION_ID = 701
+        private const val CATEGORY_CONFIG_ASSET = "notification_categories.json"
+        private const val BANKING_CATEGORY_ID = "banking_payments"
+        private const val BANKING_CATEGORY_NAME = "Banking & Payments"
+        private const val LEGACY_BANK_CATEGORY = "Bank"
+        private const val UNCLASSIFIED_CATEGORY = "Unclassified"
     }
 }

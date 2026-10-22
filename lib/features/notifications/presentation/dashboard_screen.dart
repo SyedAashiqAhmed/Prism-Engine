@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/database/queries/notification_category_queries.dart';
 import '../../../core/theme/app_colors.dart';
 import '../providers/dashboard_provider.dart';
+import 'category_browser_screen.dart';
 import 'widgets/spend_card.dart';
 import 'widgets/txn_list_tile.dart';
 
@@ -19,11 +21,13 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  late Future<Map<String, int>> _categoryCounts;
   String _filter = 'All'; // 'All', 'DEBIT', 'CREDIT'
 
   @override
   void initState() {
     super.initState();
+    _categoryCounts = _loadCategoryCounts();
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
@@ -32,6 +36,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         });
       }
     });
+  }
+
+  Future<Map<String, int>> _loadCategoryCounts() =>
+      NotificationCategoryQueries.getCategoryCounts(
+        notificationCategories.map((category) => category.name).toList(),
+      );
+
+  Future<void> _refreshDashboard() async {
+    await ref.read(dashboardProvider.notifier).refresh();
+    if (mounted) {
+      setState(() => _categoryCounts = _loadCategoryCounts());
+    }
   }
 
   @override
@@ -52,7 +68,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       'package_name': 'com.google.android.apps.messaging',
       'sender_header': null,
       'title': 'HDFC Bank',
-      'text': 'Rs.500.00 debited from A/c XX1234 on ${DateTime.now()}. Avl Bal Rs.10,000.00',
+      'text':
+          'Rs.500.00 debited from A/c XX1234 on ${DateTime.now()}. Avl Bal Rs.10,000.00',
       'timestamp': now,
       'category': 'Bank',
       'merchant': 'Test Merchant',
@@ -67,7 +84,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       'package_name': 'com.google.android.apps.messaging',
       'sender_header': null,
       'title': 'HDFC Bank',
-      'text': 'Rs.1000.00 credited to A/c XX1234 on ${DateTime.now()}. Avl Bal Rs.11,000.00',
+      'text':
+          'Rs.1000.00 credited to A/c XX1234 on ${DateTime.now()}. Avl Bal Rs.11,000.00',
       'timestamp': now + 1,
       'category': 'Bank',
       'merchant': null,
@@ -80,7 +98,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('✅ Test transactions injected! (₹500 DEBIT + ₹1000 CREDIT)'),
+          content: const Text(
+            '✅ Test transactions injected! (₹500 DEBIT + ₹1000 CREDIT)',
+          ),
           backgroundColor: AppColors.aiViolet.withAlpha(220),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 4),
@@ -98,20 +118,36 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
           'Clear All Data?',
-          style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         content: const Text(
           'This will permanently delete all captured transactions from the local database. This cannot be undone.',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 14, height: 1.5),
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 14,
+            height: 1.5,
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: AppColors.textMuted)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppColors.textMuted),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete All', style: TextStyle(color: AppColors.debit, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Delete All',
+              style: TextStyle(
+                color: AppColors.debit,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -148,53 +184,36 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
       }
     });
     final now = DateTime.now();
-    final monthName = DateFormat('MMMM yyyy').format(now);
+    final dateLabel = DateFormat('dd MMM yyyy').format(now);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: RefreshIndicator(
-        onRefresh: () => ref.read(dashboardProvider.notifier).refresh(),
-        color: AppColors.aiViolet,
+        onRefresh: _refreshDashboard,
+        color: AppColors.credit,
         backgroundColor: AppColors.surface,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             // ─── App Bar ───────────────────────────────────────────────
             SliverAppBar(
-              expandedHeight: 110,
+              expandedHeight: 126,
               pinned: true,
               backgroundColor: AppColors.background,
               elevation: 0,
               flexibleSpace: FlexibleSpaceBar(
                 background: Container(
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [
-                        AppColors.aiViolet.withAlpha(30),
-                        AppColors.background,
-                      ],
+                      colors: [Color(0xFF10251C), AppColors.background],
                     ),
                   ),
-                  padding:
-                      const EdgeInsets.fromLTRB(20, 56, 20, 0),
+                  padding: const EdgeInsets.fromLTRB(20, 52, 16, 0),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // App logo / icon
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [AppColors.aiViolet, AppColors.cyanAccent],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.bolt_rounded,
-                            color: Colors.white, size: 22),
-                      ),
-                      const SizedBox(width: 12),
                       Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -202,51 +221,58 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                           const Text(
                             'Prism Engine',
                             style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 23,
+                              height: 0.95,
+                              fontWeight: FontWeight.w900,
                               color: AppColors.textPrimary,
-                              letterSpacing: -0.3,
+                              letterSpacing: -0.8,
                             ),
                           ),
-                          Text(
-                            monthName,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textMuted,
+                          const SizedBox(height: 5),
+                          const Text(
+                            'EXPENSE TRACKER',
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: AppColors.credit,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.1,
                             ),
                           ),
                         ],
                       ),
                       const Spacer(),
-                      // Live indicator
                       _LivePillWidget(),
-                      // Refresh
                       IconButton(
-                        onPressed: () =>
-                            ref.read(dashboardProvider.notifier).refresh(),
-                        icon: const Icon(Icons.refresh_rounded,
-                            color: AppColors.textSecondary, size: 20),
+                        onPressed: _refreshDashboard,
+                        icon: const Icon(Icons.refresh_rounded, size: 19),
+                        color: AppColors.background,
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppColors.credit,
+                        ),
                         tooltip: 'Refresh data',
-                        padding: EdgeInsets.zero,
                         visualDensity: VisualDensity.compact,
                       ),
-                      // Clear all data
-                      IconButton(
-                        onPressed: _clearAllData,
-                        icon: const Icon(Icons.delete_outline_rounded,
-                            color: AppColors.textSecondary, size: 20),
-                        tooltip: 'Clear all transaction data',
-                        padding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      // Debug: inject test data
-                      IconButton(
-                        onPressed: _injectTestTransaction,
-                        icon: const Icon(Icons.bug_report_outlined,
-                            color: AppColors.textDisabled, size: 18),
-                        tooltip: 'Inject test transaction',
-                        padding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
+                      PopupMenuButton<String>(
+                        tooltip: 'More options',
+                        icon: const Icon(
+                          Icons.more_vert_rounded,
+                          color: AppColors.textSecondary,
+                          size: 20,
+                        ),
+                        onSelected: (value) {
+                          if (value == 'clear') _clearAllData();
+                          if (value == 'test') _injectTestTransaction();
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(
+                            value: 'clear',
+                            child: Text('Clear all transactions'),
+                          ),
+                          PopupMenuItem(
+                            value: 'test',
+                            child: Text('Inject test transactions'),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -259,6 +285,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
               padding: const EdgeInsets.symmetric(horizontal: 16),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.calendar_month_rounded,
+                        size: 14,
+                        color: AppColors.credit,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        dateLabel,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
                   // Spend summary cards (side by side)
                   Row(
                     children: [
@@ -271,6 +316,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
 
                   // ─── EOD Summary Banner ─────────────────────────────
                   _EodSummaryBanner(state: state),
+                  const SizedBox(height: 20),
+
+                  // ─── Notification Categories ────────────────────────
+                  _DashboardCategorySection(
+                    categoryCounts: _categoryCounts,
+                    onRetry: () =>
+                        setState(() => _categoryCounts = _loadCategoryCounts()),
+                  ),
                   const SizedBox(height: 20),
 
                   // ─── Transaction Feed ───────────────────────────────
@@ -287,7 +340,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                       const Spacer(),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.aiContainer,
                           borderRadius: BorderRadius.circular(20),
@@ -340,10 +395,13 @@ class _LivePillWidgetState extends State<_LivePillWidget>
   void initState() {
     super.initState();
     _pulse = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1200))
-      ..repeat(reverse: true);
-    _anim = Tween<double>(begin: 0.4, end: 1.0).animate(
-        CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    _anim = Tween<double>(
+      begin: 0.4,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
   }
 
   @override
@@ -357,13 +415,14 @@ class _LivePillWidgetState extends State<_LivePillWidget>
     return AnimatedBuilder(
       animation: _anim,
       builder: (_, child) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         decoration: BoxDecoration(
           color: AppColors.creditContainer,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-              color: AppColors.credit.withAlpha((_anim.value * 180).round()),
-              width: 1),
+            color: AppColors.credit.withAlpha((_anim.value * 180).round()),
+            width: 1,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -372,8 +431,7 @@ class _LivePillWidgetState extends State<_LivePillWidget>
               width: 6,
               height: 6,
               decoration: BoxDecoration(
-                color: AppColors.credit
-                    .withAlpha((_anim.value * 255).round()),
+                color: AppColors.credit.withAlpha((_anim.value * 255).round()),
                 shape: BoxShape.circle,
               ),
             ),
@@ -383,9 +441,222 @@ class _LivePillWidgetState extends State<_LivePillWidget>
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
-                color:
-                    AppColors.creditLight.withAlpha((_anim.value * 255).round()),
+                color: AppColors.creditLight.withAlpha(
+                  (_anim.value * 255).round(),
+                ),
                 letterSpacing: 1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DashboardCategorySection extends StatelessWidget {
+  final Future<Map<String, int>> categoryCounts;
+  final VoidCallback onRetry;
+
+  const _DashboardCategorySection({
+    required this.categoryCounts,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            const Text(
+              'NOTIFICATION CATEGORIES',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.35,
+              ),
+            ),
+            const Spacer(),
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const NotificationCategoryBrowserScreen(),
+                ),
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.credit,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('See All →', style: TextStyle(fontSize: 11)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 9),
+        FutureBuilder<Map<String, int>>(
+          future: categoryCounts,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Could not load notification categories.',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  TextButton(onPressed: onRetry, child: const Text('Retry')),
+                ],
+              );
+            }
+            if (!snapshot.hasData) {
+              return const LinearProgressIndicator(
+                minHeight: 2,
+                color: AppColors.credit,
+                backgroundColor: AppColors.surfaceElevated,
+              );
+            }
+
+            final counts = snapshot.data!;
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: notificationCategories.length + 1,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 0.92,
+              ),
+              itemBuilder: (context, index) {
+                if (index == notificationCategories.length) {
+                  return _MoreCategoriesTile(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            const NotificationCategoryBrowserScreen(),
+                      ),
+                    ),
+                  );
+                }
+
+                final category = notificationCategories[index];
+                return _DashboardCategoryTile(
+                  category: category,
+                  count: counts[category.name] ?? 0,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          NotificationCategoryDetailScreen(category: category),
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _DashboardCategoryTile extends StatelessWidget {
+  final NotificationCategoryDefinition category;
+  final int count;
+  final VoidCallback onTap;
+
+  const _DashboardCategoryTile({
+    required this.category,
+    required this.count,
+    required this.onTap,
+  });
+
+  String get _label => switch (category.name) {
+    'Banking & Payments' => 'Banking',
+    'Deliveries & Orders' => 'Orders',
+    'Bills & Due Dates' => 'Bills',
+    'Placement & Jobs' => 'Jobs',
+    'Travel & Transport' => 'Travel',
+    'Appointments & Reminders' => 'Reminders',
+    _ => category.name,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final tileColor = category.name == 'Unclassified'
+        ? const Color(0xFF52605A)
+        : category.color;
+    return Material(
+      color: tileColor,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(category.icon, color: Colors.black87, size: 19),
+              const SizedBox(height: 5),
+              Text(
+                _label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '$count',
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MoreCategoriesTile extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _MoreCategoriesTile({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surfaceElevated,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_rounded, color: AppColors.textSecondary, size: 20),
+            SizedBox(height: 5),
+            Text(
+              'More',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
@@ -416,10 +687,7 @@ class _EodSummaryBanner extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppColors.aiViolet.withAlpha(60),
-            AppColors.surfaceElevated,
-          ],
+          colors: [AppColors.aiViolet.withAlpha(60), AppColors.surfaceElevated],
         ),
         border: Border.all(color: AppColors.glassBorderStrong, width: 1),
       ),
@@ -428,8 +696,11 @@ class _EodSummaryBanner extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.nights_stay_rounded,
-                  color: AppColors.aiVioletLight, size: 16),
+              const Icon(
+                Icons.nights_stay_rounded,
+                color: AppColors.aiVioletLight,
+                size: 16,
+              ),
               const SizedBox(width: 6),
               Text(
                 'End of Day Summary · ${DateFormat('d MMM').format(now)}',
@@ -469,7 +740,9 @@ class _EodSummaryBanner extends StatelessWidget {
                 child: _EodItem(
                   label: 'Net',
                   amount: net.abs(),
-                  color: isPositive ? AppColors.creditLight : AppColors.debitLight,
+                  color: isPositive
+                      ? AppColors.creditLight
+                      : AppColors.debitLight,
                   prefix: isPositive ? '+' : '-',
                 ),
               ),
@@ -602,8 +875,8 @@ class _TransactionList extends StatelessWidget {
     final rows = filter == 'All'
         ? state.recentTransactions
         : state.recentTransactions
-            .where((r) => r['txn_type'] == filter)
-            .toList();
+              .where((r) => r['txn_type'] == filter)
+              .toList();
 
     if (rows.isEmpty) {
       return Container(
@@ -638,8 +911,6 @@ class _TransactionList extends StatelessWidget {
       );
     }
 
-    return Column(
-      children: rows.map((row) => TxnListTile(row: row)).toList(),
-    );
+    return Column(children: rows.map((row) => TxnListTile(row: row)).toList());
   }
 }

@@ -27,8 +27,9 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,
     );
   }
 
@@ -47,7 +48,11 @@ class DatabaseHelper {
         merchant TEXT,
         amount REAL,
         txn_type TEXT,
-        is_priority INTEGER DEFAULT 0
+        is_priority INTEGER DEFAULT 0,
+        category_labels TEXT NOT NULL DEFAULT '[]',
+        classification_scores TEXT NOT NULL DEFAULT '{}',
+        classification_version TEXT,
+        classification_confidence REAL
       )
     ''');
 
@@ -66,6 +71,26 @@ class DatabaseHelper {
       CREATE INDEX idx_txn_source_key 
       ON notifications (source_key)
     ''');
+  }
+
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      final columns = await db.rawQuery('PRAGMA table_info(notifications)');
+      final existing = columns.map((row) => row['name'] as String).toSet();
+      const definitions = {
+        'category_labels': "TEXT NOT NULL DEFAULT '[]'",
+        'classification_scores': "TEXT NOT NULL DEFAULT '{}'",
+        'classification_version': 'TEXT',
+        'classification_confidence': 'REAL',
+      };
+      for (final entry in definitions.entries) {
+        if (!existing.contains(entry.key)) {
+          await db.execute(
+            'ALTER TABLE notifications ADD COLUMN ${entry.key} ${entry.value}',
+          );
+        }
+      }
+    }
   }
 
   Future<int> insertNotification(Map<String, dynamic> row) async {

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
 /// Centralized design tokens and color palette for Prism Engine.
-/// Designed with a modern, glassmorphic dark-first aesthetic.
+/// Designed with a dark background and vivid green financial accents.
 abstract class AppColors {
   // --- Surface & Backgrounds ---
-  static const Color background = Color(0xFF0B0E14);
-  static const Color surface = Color(0xFF151922);
-  static const Color surfaceElevated = Color(0xFF1E2430);
-  static const Color surfaceHighlight = Color(0xFF283141);
+  static const Color background = Color(0xFF080B0A);
+  static const Color surface = Color(0xFF111614);
+  static const Color surfaceElevated = Color(0xFF1A211E);
+  static const Color surfaceHighlight = Color(0xFF26302B);
 
   // --- Financial Accents ---
   /// Neon Emerald for credits, savings, and income
@@ -21,10 +21,10 @@ abstract class AppColors {
   static const Color debitContainer = Color(0x1FFF4D4D);
 
   // --- Intelligence & Brand Accents ---
-  /// Royal Violet for AI assistant and smart features
-  static const Color aiViolet = Color(0xFF7C3AED);
-  static const Color aiVioletLight = Color(0xFFA78BFA);
-  static const Color aiContainer = Color(0x2E7C3AED);
+  /// Neon green for the Prism brand and smart features
+  static const Color aiViolet = Color(0xFF00E599);
+  static const Color aiVioletLight = Color(0xFF49F2B0);
+  static const Color aiContainer = Color(0x2E00E599);
 
   /// Electric Cyan for placement alerts and links
   static const Color cyanAccent = Color(0xFF06B6D4);
