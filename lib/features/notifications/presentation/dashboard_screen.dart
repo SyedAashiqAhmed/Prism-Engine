@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/database/queries/notification_category_queries.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../analytics/presentation/analytics_screen.dart';
 import '../providers/dashboard_provider.dart';
 import 'category_browser_screen.dart';
 import 'widgets/spend_card.dart';
@@ -242,6 +243,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                       ),
                       const Spacer(),
                       _LivePillWidget(),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const AnalyticsScreen(),
+                          ),
+                        ),
+                        icon: const Icon(
+                          Icons.analytics_outlined,
+                          color: AppColors.credit,
+                          size: 20,
+                        ),
+                        tooltip: 'Open analytics',
+                        visualDensity: VisualDensity.compact,
+                      ),
                       IconButton(
                         onPressed: _refreshDashboard,
                         icon: const Icon(Icons.refresh_rounded, size: 19),
