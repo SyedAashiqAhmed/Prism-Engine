@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../../core/database/database_helper.dart';
 import '../../../core/database/queries/notification_category_queries.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../analytics/presentation/analytics_screen.dart';
@@ -55,59 +54,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
   void dispose() {
     _tabController.dispose();
     super.dispose();
-  }
-
-  /// Injects a fake bank transaction DIRECTLY into SQLite to verify
-  /// the DB → Riverpod → UI pipeline works independently of the
-  /// notification listener service. Also tests a CREDIT variant.
-  Future<void> _injectTestTransaction() async {
-    final now = DateTime.now().millisecondsSinceEpoch;
-
-    // Inject a DEBIT (simulates HDFC bank SMS)
-    await DatabaseHelper.instance.insertNotification({
-      'source_key': 'test_hdfc_debit_$now',
-      'package_name': 'com.google.android.apps.messaging',
-      'sender_header': null,
-      'title': 'HDFC Bank',
-      'text':
-          'Rs.500.00 debited from A/c XX1234 on ${DateTime.now()}. Avl Bal Rs.10,000.00',
-      'timestamp': now,
-      'category': 'Bank',
-      'merchant': 'Test Merchant',
-      'amount': 500.0,
-      'txn_type': 'DEBIT',
-      'is_priority': 0,
-    });
-
-    // Inject a CREDIT (simulates HDFC bank credit SMS)
-    await DatabaseHelper.instance.insertNotification({
-      'source_key': 'test_hdfc_credit_$now',
-      'package_name': 'com.google.android.apps.messaging',
-      'sender_header': null,
-      'title': 'HDFC Bank',
-      'text':
-          'Rs.1000.00 credited to A/c XX1234 on ${DateTime.now()}. Avl Bal Rs.11,000.00',
-      'timestamp': now + 1,
-      'category': 'Bank',
-      'merchant': null,
-      'amount': 1000.0,
-      'txn_type': 'CREDIT',
-      'is_priority': 0,
-    });
-
-    await ref.read(dashboardProvider.notifier).refresh();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            '✅ Test transactions injected! (₹500 DEBIT + ₹1000 CREDIT)',
-          ),
-          backgroundColor: AppColors.aiViolet.withAlpha(220),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-    }
   }
 
   /// Shows a confirmation dialog then deletes all transactions from SQLite.
@@ -276,16 +222,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                         ),
                         onSelected: (value) {
                           if (value == 'clear') _clearAllData();
-                          if (value == 'test') _injectTestTransaction();
                         },
                         itemBuilder: (_) => const [
                           PopupMenuItem(
                             value: 'clear',
                             child: Text('Clear all transactions'),
-                          ),
-                          PopupMenuItem(
-                            value: 'test',
-                            child: Text('Inject test transactions'),
                           ),
                         ],
                       ),

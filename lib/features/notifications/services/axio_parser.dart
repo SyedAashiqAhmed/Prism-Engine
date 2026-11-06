@@ -4,12 +4,14 @@ class ParsedTxn {
   final double amount;
   final String? merchant;
   final String? accountLast4;
+  final String? upiReference;
 
   const ParsedTxn({
     required this.type,
     required this.amount,
     this.merchant,
     this.accountLast4,
+    this.upiReference,
   });
 
   @override
@@ -43,6 +45,14 @@ class AxioParser {
         lower.contains('loan offer')) {
       return null;
     }
+    if (RegExp(
+          r'\b(?:shop|offer|win|collect|diwali|sale|discount|assured cashback|up to|campaign|reward)\b',
+        ).hasMatch(lower) &&
+        !RegExp(
+          r'\b(?:debited|credited|sent|received|paid|transferred|withdrawn)\b',
+        ).hasMatch(lower)) {
+      return null;
+    }
 
     // Remove balances and available limits so they cannot be mistaken for the
     // transaction amount.
@@ -57,6 +67,10 @@ class AxioParser {
     if (acctMatch != null) {
       accountLast4 = acctMatch.group(1);
     }
+    final referenceMatch = RegExp(
+      r'(?:upi\s*(?:transaction\s*)?(?:reference|ref)|transaction\s*(?:reference|ref)|\brrn\b|\bref\b)\s*(?:no\.?|number|id)?\s*[:#.\-]?\s*(\d{8,20})\b',
+      caseSensitive: false,
+    ).firstMatch(fullText);
 
     // ── 4. Extract Merchant Name ─────────────────────────────────────────
     // Handles "Paid to Swiggy", "at Amazon", "VPA swiggy@okaxis",
@@ -111,7 +125,7 @@ class AxioParser {
       rawTextNoBal,
       type: 'CREDIT',
       keywords:
-          r'credit(?:ed)?(?!\s+card)|received|deposited|refund(?:ed)?|reversed?|added|cashback',
+        r'credit(?:ed)?(?!\s+card)|received|deposited|refund(?:ed)?|reversed?|added',
     );
 
     // Prefer explicit transaction wording in the notification body over a
@@ -127,7 +141,7 @@ class AxioParser {
         textNoBal,
         type: 'CREDIT',
         keywords:
-            r'credit(?:ed)?(?!\s+card)|received|deposited|refund(?:ed)?|reversed?|added|cashback',
+            r'credit(?:ed)?(?!\s+card)|received|deposited|refund(?:ed)?|reversed?|added',
       );
     }
 
@@ -146,6 +160,7 @@ class AxioParser {
       amount: transaction.amount,
       merchant: merchant,
       accountLast4: accountLast4,
+      upiReference: referenceMatch?.group(1),
     );
   }
 

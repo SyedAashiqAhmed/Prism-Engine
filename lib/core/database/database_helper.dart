@@ -27,9 +27,18 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
+      onOpen: (db) async {
+        await db.delete(
+          'notifications',
+          where: 'timestamp < ?',
+          whereArgs: [
+            DateTime.now().subtract(const Duration(days: 90)).millisecondsSinceEpoch,
+          ],
+        );
+      },
     );
   }
 
@@ -52,7 +61,11 @@ class DatabaseHelper {
         category_labels TEXT NOT NULL DEFAULT '[]',
         classification_scores TEXT NOT NULL DEFAULT '{}',
         classification_version TEXT,
-        classification_confidence REAL
+        classification_confidence REAL,
+        account_last4 TEXT,
+        title_encrypted TEXT,
+        text_encrypted TEXT,
+        upi_reference TEXT
       )
     ''');
 
@@ -91,15 +104,76 @@ class DatabaseHelper {
         }
       }
     }
+    if (oldVersion < 3) {
+      final columns = await db.rawQuery('PRAGMA table_info(notifications)');
+      final existing = columns.map((row) => row['name'] as String).toSet();
+      const definitions = {
+        'account_last4': 'TEXT',
+        'title_encrypted': 'TEXT',
+        'text_encrypted': 'TEXT',
+      };
+      for (final entry in definitions.entries) {
+        if (!existing.contains(entry.key)) {
+          await db.execute(
+            'ALTER TABLE notifications ADD COLUMN ${entry.key} ${entry.value}',
+          );
+        }
+      }
+    }
+    if (oldVersion < 4) {
+      final columns = await db.rawQuery('PRAGMA table_info(notifications)');
+      final existing = columns.map((row) => row['name'] as String).toSet();
+      if (!existing.contains('upi_reference')) {
+        await db.execute(
+          'ALTER TABLE notifications ADD COLUMN upi_reference TEXT',
+        );
+      }
+    }
+  }
+
+  Future<bool> insertTransactionIfUnique(Map<String, dynamic> row) async {
+    final db = await database;
+    return db.transaction((txn) async {
+      final reference = row['upi_reference'] as String?;
+      if (reference != null && reference.trim().isNotEmpty) {
+        final existing = await txn.query(
+          'notifications',
+          columns: ['id'],
+          where: 'upi_reference = ?',
+          whereArgs: [reference.trim()],
+          limit: 1,
+        );
+        if (existing.isNotEmpty) return false;
+      }
+      await txn.insert(
+        'notifications',
+        row,
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+      return true;
+    });
   }
 
   Future<int> insertNotification(Map<String, dynamic> row) async {
     final db = await database;
-    return await db.insert(
-      'notifications',
-      row,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    return db.transaction((txn) async {
+      final reference = row['upi_reference'] as String?;
+      if (reference != null && reference.trim().isNotEmpty) {
+        final existing = await txn.query(
+          'notifications',
+          columns: ['id'],
+          where: 'upi_reference = ?',
+          whereArgs: [reference.trim()],
+          limit: 1,
+        );
+        if (existing.isNotEmpty) return existing.single['id'] as int;
+      }
+      return txn.insert(
+        'notifications',
+        row,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    });
   }
 
   Future<List<Map<String, dynamic>>> queryNotifications({

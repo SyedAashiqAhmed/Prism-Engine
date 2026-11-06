@@ -39,12 +39,23 @@ class DedupService {
     required double amount,
     required String type,
     required int timestamp,
+    String? upiReference,
     String? merchant,
     String category = 'Bank',
     int windowMs = defaultWindowMs,
   }) async {
     final db = await DatabaseHelper.instance.database;
     return db.transaction((txn) async {
+      if (upiReference != null && upiReference.trim().isNotEmpty) {
+        final existing = await txn.query(
+          'notifications',
+          columns: ['id'],
+          where: 'upi_reference = ?',
+          whereArgs: [upiReference.trim()],
+          limit: 1,
+        );
+        if (existing.isNotEmpty) return false;
+      }
       final isDuplicate = await _isDuplicateAndReconcile(
         txn,
         amount: amount,

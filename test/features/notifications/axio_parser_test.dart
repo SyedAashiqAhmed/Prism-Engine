@@ -26,6 +26,25 @@ void main() {
       expect(parsed.accountLast4, equals('9876'));
     });
 
+    test('extracts UPI reference number from SMS formats', () {
+      final parsed = AxioParser.parse(
+        'Sent Rs.15.00 From HDFC Bank A/C *6880 To BHARU CAFE. Ref 132423321351',
+      );
+
+      expect(parsed, isNotNull);
+      expect(parsed!.upiReference, equals('132423321351'));
+      expect(parsed.type, equals('DEBIT'));
+    });
+
+    test('ignores promotional cashback campaigns', () {
+      expect(
+        AxioParser.parse(
+          'This Diwali, Shop, Collect & Win! Get assured cashback up to Rs.1,001',
+        ),
+        isNull,
+      );
+    });
+
     test('ICICI Credit Card Spend with INR and Available Limit', () {
       const sms =
           'Tranx of INR 1,299.00 spent on ICICI Bank Card ending 1122 at AMAZON on 19-Sep-26. Available limit: INR 45,000.00';

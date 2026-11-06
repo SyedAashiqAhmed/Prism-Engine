@@ -40,9 +40,6 @@ dependencies:
   flutter_secure_storage: ^9.0.0
   shared_preferences: ^2.2.2
 
-  # Android System Service
-  flutter_notification_listener: ^1.4.0
-
   # AI & Cloud Sync
   google_generative_ai: ^0.4.0
   google_sign_in: ^6.2.1

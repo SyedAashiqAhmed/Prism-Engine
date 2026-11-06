@@ -32,7 +32,8 @@ void main() {
               merchant TEXT,
               amount REAL,
               txn_type TEXT,
-              is_priority INTEGER DEFAULT 0
+              is_priority INTEGER DEFAULT 0,
+              upi_reference TEXT
             )
           ''');
         },
@@ -82,5 +83,39 @@ void main() {
     );
 
     expect(isOutsideWindowDup, isFalse, reason: 'Event 20 minutes later is outside sliding window');
+  });
+
+  test('RRN deduplicates the same transaction across sources globally', () async {
+    final db = await DatabaseHelper.instance.database;
+    final firstId = await DatabaseHelper.instance.insertNotification({
+      'source_key': 'gmail_001',
+      'package_name': 'gmail',
+      'timestamp': 1000,
+      'category': 'Banking & Payments',
+      'amount': 15.0,
+      'txn_type': 'DEBIT',
+      'upi_reference': '132423321351',
+    });
+
+    final inserted = await DedupService.insertIfUnique(
+      row: {
+        'source_key': 'sms_001',
+        'package_name': 'sms',
+        'timestamp': 2000,
+        'category': 'Banking & Payments',
+        'amount': 15.0,
+        'txn_type': 'DEBIT',
+        'upi_reference': '132423321351',
+      },
+      amount: 15.0,
+      type: 'DEBIT',
+      timestamp: 2000,
+      upiReference: '132423321351',
+      category: 'Banking & Payments',
+    );
+
+    expect(firstId, isPositive);
+    expect(inserted, isFalse);
+    expect(await db.query('notifications'), hasLength(1));
   });
 }

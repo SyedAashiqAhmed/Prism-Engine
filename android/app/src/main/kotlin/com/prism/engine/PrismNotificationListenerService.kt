@@ -49,20 +49,9 @@ class PrismNotificationListenerService : NotificationListenerService() {
         ) {
             return
         }
-        val extras = sbn.notification.extras
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
-        val bodyParts = buildList {
-            val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
-            val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
-            val primaryText = bigText?.takeIf { it.isNotBlank() }
-                ?: text?.takeIf { it.isNotBlank() }
-            if (primaryText != null) add(primaryText)
-            val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
-            lines?.forEach { line ->
-                if (!line.isNullOrBlank() && line.toString() !in this) add(line.toString())
-            }
-        }
-        val body = bodyParts.joinToString("\n")
+        val extracted = NotificationPayloadExtractor.extract(sbn.notification.extras)
+        val title = extracted.title
+        val body = extracted.body
         if (title.isBlank() && body.isBlank()) return
 
         try {
@@ -115,8 +104,8 @@ class PrismNotificationListenerService : NotificationListenerService() {
         }
     }
 
-    private class TransactionStore(context: Context) :
-        SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
+    private class TransactionStore(private val appContext: Context) :
+        SQLiteOpenHelper(appContext, DATABASE_NAME, null, DATABASE_VERSION) {
 
         override fun onCreate(db: SQLiteDatabase) {
             db.execSQL(
@@ -137,7 +126,11 @@ class PrismNotificationListenerService : NotificationListenerService() {
                     category_labels TEXT NOT NULL DEFAULT '[]',
                     classification_scores TEXT NOT NULL DEFAULT '{}',
                     classification_version TEXT,
-                    classification_confidence REAL
+                    classification_confidence REAL,
+                    account_last4 TEXT,
+                    title_encrypted TEXT,
+                    text_encrypted TEXT,
+                    upi_reference TEXT
                 )
                 """.trimIndent(),
             )
@@ -153,32 +146,74 @@ class PrismNotificationListenerService : NotificationListenerService() {
         }
 
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-            ensureClassificationColumns(db)
+            ensureColumns(db)
         }
 
         override fun onOpen(db: SQLiteDatabase) {
             super.onOpen(db)
-            ensureClassificationColumns(db)
+            ensureColumns(db)
+            encryptLegacyPayloads(db)
+            purgeExpired(db)
         }
 
-        private fun ensureClassificationColumns(db: SQLiteDatabase) {
+        private fun ensureColumns(db: SQLiteDatabase) {
             val existing = mutableSetOf<String>()
             db.rawQuery("PRAGMA table_info(notifications)", null).use { cursor ->
                 val nameColumn = cursor.getColumnIndex("name")
                 while (cursor.moveToNext()) existing += cursor.getString(nameColumn)
             }
-            val columns = listOf(
-                "category_labels TEXT NOT NULL DEFAULT '[]'",
-                "classification_scores TEXT NOT NULL DEFAULT '{}'",
-                "classification_version TEXT",
-                "classification_confidence REAL",
-            )
-            columns.forEach { definition ->
+            NotificationDatabaseSchema.missingColumns(existing).forEach { definition ->
                 val name = definition.substringBefore(' ')
                 if (name !in existing) {
                     db.execSQL("ALTER TABLE notifications ADD COLUMN $definition")
                 }
             }
+        }
+
+        private fun encryptLegacyPayloads(db: SQLiteDatabase) {
+            val payloads = EncryptedNotificationPayload(appContext)
+            db.beginTransaction()
+            try {
+                db.rawQuery(
+                    """
+                    SELECT id, title, text, title_encrypted, text_encrypted
+                    FROM notifications
+                    WHERE title = ? OR text = ?
+                    """.trimIndent(),
+                    arrayOf(PROTECTED_TITLE, PROTECTED_TEXT),
+                ).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val id = cursor.getLong(0)
+                        val title = cursor.getString(1)
+                        val text = cursor.getString(2)
+                        val encryptedTitle = cursor.getString(3)
+                        val encryptedText = cursor.getString(4)
+                        db.execSQL(
+                            """
+                            UPDATE notifications
+                            SET title = ?, text = ?
+                            WHERE id = ?
+                            """.trimIndent(),
+                            arrayOf<Any?>(
+                                payloads.decrypt(encryptedTitle) ?: title,
+                                payloads.decrypt(encryptedText) ?: text,
+                                id,
+                            ),
+                        )
+                    }
+                }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+        }
+
+        private fun purgeExpired(db: SQLiteDatabase) {
+            db.delete(
+                "notifications",
+                "timestamp < ?",
+                arrayOf(NotificationRetention.cutoff(System.currentTimeMillis()).toString()),
+            )
         }
 
         fun save(
@@ -193,6 +228,9 @@ class PrismNotificationListenerService : NotificationListenerService() {
             val classification = classifier.classify(message)
             val transaction = TransactionParser.parse(title, body)
             val categories = classification.labels.toMutableList()
+            if (transaction == null) {
+                categories.removeAll { it.id == BANKING_CATEGORY_ID }
+            }
             if (transaction != null) {
                 val bankingMatch = CategoryMatch(
                     id = BANKING_CATEGORY_ID,
@@ -221,12 +259,41 @@ class PrismNotificationListenerService : NotificationListenerService() {
             val database = writableDatabase
             database.beginTransaction()
             try {
+                val referenceDuplicate = transaction?.upiReference?.let { reference ->
+                    database.rawQuery(
+                        "SELECT id, merchant, account_last4 FROM notifications WHERE upi_reference = ? LIMIT 1",
+                        arrayOf(reference),
+                    ).use { cursor ->
+                        if (!cursor.moveToFirst()) {
+                            null
+                        } else {
+                            val duplicateId = cursor.getLong(0)
+                            database.execSQL(
+                                """
+                                UPDATE notifications
+                                SET merchant = COALESCE(NULLIF(merchant, ''), ?),
+                                    account_last4 = COALESCE(NULLIF(account_last4, ''), ?)
+                                WHERE id = ?
+                                """.trimIndent(),
+                                arrayOf<Any?>(
+                                    transaction.merchant,
+                                    transaction.accountLast4,
+                                    duplicateId,
+                                ),
+                            )
+                            duplicateId
+                        }
+                    }
+                }
+                if (referenceDuplicate != null) {
+                    database.setTransactionSuccessful()
+                    return false
+                }
                 val duplicate = database.rawQuery(
                     """
-                    SELECT id, merchant FROM notifications
+                    SELECT id, merchant, account_last4 FROM notifications
                     WHERE category IN (?, ?) AND txn_type = ? AND amount = ?
                       AND timestamp BETWEEN ? AND ?
-                    LIMIT 1
                     """.trimIndent(),
                     arrayOf(
                         LEGACY_BANK_CATEGORY,
@@ -237,15 +304,30 @@ class PrismNotificationListenerService : NotificationListenerService() {
                         (timestamp + DEDUP_WINDOW_MS).toString(),
                     ),
                 ).use { cursor ->
-                    if (transaction != null && cursor.moveToFirst()) {
-                        val existingMerchant = cursor.getString(1)
-                        if (existingMerchant.isNullOrBlank() && !transaction.merchant.isNullOrBlank()) {
+                    if (transaction != null) {
+                        val duplicateId = NotificationDeduplicator.findDuplicate(
+                            cursor,
+                            transaction.merchant,
+                            transaction.accountLast4,
+                        )
+                        if (duplicateId != null) {
                             database.execSQL(
-                                "UPDATE notifications SET merchant = ? WHERE id = ?",
-                                arrayOf<Any?>(transaction.merchant, cursor.getLong(0)),
+                                """
+                                UPDATE notifications
+                                SET merchant = COALESCE(NULLIF(merchant, ''), ?),
+                                    account_last4 = COALESCE(NULLIF(account_last4, ''), ?)
+                                WHERE id = ?
+                                """.trimIndent(),
+                                arrayOf<Any?>(
+                                    transaction.merchant,
+                                    transaction.accountLast4,
+                                    duplicateId,
+                                ),
                             )
+                            true
+                        } else {
+                            false
                         }
-                        true
                     } else {
                         false
                     }
@@ -260,14 +342,17 @@ class PrismNotificationListenerService : NotificationListenerService() {
                     .digest(message.trim().lowercase(Locale.ROOT).toByteArray())
                     .joinToString("") { "%02x".format(it) }
                 val sourceKey = "${packageName}_${notificationKey}_$contentHash"
+                val payloads = EncryptedNotificationPayload(appContext)
                 database.execSQL(
                     """
                     INSERT OR IGNORE INTO notifications
                     (source_key, package_name, sender_header, title, text, timestamp,
                      category, merchant, amount, txn_type, is_priority,
+                     account_last4, title_encrypted, text_encrypted,
+                     upi_reference,
                      category_labels, classification_scores, classification_version,
                      classification_confidence)
-                    VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+                    VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
                     """.trimIndent(),
                     arrayOf<Any?>(
                         sourceKey,
@@ -279,6 +364,10 @@ class PrismNotificationListenerService : NotificationListenerService() {
                         transaction?.merchant,
                         transaction?.amount,
                         transaction?.type,
+                        transaction?.accountLast4,
+                        payloads.encrypt(title),
+                        payloads.encrypt(body),
+                        transaction?.upiReference,
                         categoryLabels,
                         scores,
                         classification.modelVersion,
@@ -294,78 +383,12 @@ class PrismNotificationListenerService : NotificationListenerService() {
 
         companion object {
             private const val DATABASE_NAME = "prism_engine.db"
-            private const val DATABASE_VERSION = 2
+            private const val DATABASE_VERSION = 4
             private const val LEGACY_BANK_CATEGORY = "Bank"
             private const val BANKING_CATEGORY_NAME = "Banking & Payments"
             private const val DEDUP_WINDOW_MS = 10 * 60 * 1000L
-        }
-    }
-
-    private data class ParsedTransaction(
-        val type: String,
-        val amount: Double,
-        val merchant: String?,
-    )
-
-    private object TransactionParser {
-        private val balancePattern = Regex(
-            """\b(?:avl\.?\s*(?:bal(?:ance)?|limit|credit)|available\s+(?:balance|limit|credit)|current\s+balance|closing\s+balance|a/c\s*bal(?:ance)?|avbl|balance|bal)\b\s*:?\s*(?:rs\.?|inr|₹)?\s*[\d,]+(?:\.\d{1,2})?""",
-            RegexOption.IGNORE_CASE,
-        )
-        private val debitKeywords =
-            """debit(?:ed)?|deducted|withdrawn|withdrawal|spent|paid|payment|purchase|sent|transfer(?:red)?|charged"""
-        private val creditKeywords =
-            """credit(?:ed)?(?!\s+card)|received|deposited|refund(?:ed)?|reversed?|added|cashback"""
-        private val amountBeforeDirection = Regex(
-            """(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)[^\n]{0,100}?\b($debitKeywords|$creditKeywords)\b""",
-            RegexOption.IGNORE_CASE,
-        )
-        private val directionBeforeAmount = Regex(
-            """\b($debitKeywords|$creditKeywords)\b[^\n]{0,80}?(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)""",
-            RegexOption.IGNORE_CASE,
-        )
-        private val merchantPattern = Regex(
-            """\b(?:to|at)\s+([A-Za-z][A-Za-z0-9 &._-]{1,30}?)(?=\s+(?:on|ref|upi|via|from)\b|[,.]|$)""",
-            RegexOption.IGNORE_CASE,
-        )
-
-        fun parse(title: String, body: String): ParsedTransaction? {
-            val cleanBody = balancePattern.replace(body, " ")
-            val text = cleanBody.ifBlank { balancePattern.replace(title, " ") }
-            val candidates = mutableListOf<Pair<Int, ParsedTransaction>>()
-
-            amountBeforeDirection.findAll(text).forEach { match ->
-                parseMatch(match.groupValues[1], match.groupValues[2], match.range.first)?.let {
-                    candidates.add(it)
-                }
-            }
-            directionBeforeAmount.findAll(text).forEach { match ->
-                parseMatch(match.groupValues[2], match.groupValues[1], match.range.first)?.let {
-                    candidates.add(it)
-                }
-            }
-
-            val selected = candidates.minByOrNull { it.first }?.second ?: return null
-            val merchant = merchantPattern.find(cleanBody)?.groupValues?.getOrNull(1)?.trim()
-            return selected.copy(merchant = merchant?.takeIf { it.isNotBlank() })
-        }
-
-        private fun parseMatch(amountText: String, keyword: String, position: Int): Pair<Int, ParsedTransaction>? {
-            val amount = amountText.replace(",", "").toDoubleOrNull() ?: return null
-            if (amount <= 0.0) return null
-            val normalized = keyword.lowercase(Locale.ROOT)
-            val isCredit = normalized.startsWith("credit") ||
-                normalized.startsWith("receiv") ||
-                normalized.startsWith("deposit") ||
-                normalized.startsWith("refund") ||
-                normalized.startsWith("revers") ||
-                normalized.startsWith("added") ||
-                normalized.startsWith("cashback")
-            return position to ParsedTransaction(
-                type = if (isCredit) "CREDIT" else "DEBIT",
-                amount = amount,
-                merchant = null,
-            )
+            private const val PROTECTED_TITLE = "Protected notification"
+            private const val PROTECTED_TEXT = "Protected notification content"
         }
     }
 

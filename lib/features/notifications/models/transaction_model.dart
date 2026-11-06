@@ -12,6 +12,7 @@ class TransactionModel {
   final double? amount;
   final String? txnType; // 'DEBIT' or 'CREDIT'
   final bool isPriority;
+  final String? upiReference;
 
   const TransactionModel({
     this.id,
@@ -26,6 +27,7 @@ class TransactionModel {
     this.amount,
     this.txnType,
     this.isPriority = false,
+    this.upiReference,
   });
 
   Map<String, dynamic> toMap() {
@@ -42,6 +44,7 @@ class TransactionModel {
       'amount': amount,
       'txn_type': txnType,
       'is_priority': isPriority ? 1 : 0,
+      'upi_reference': upiReference,
     };
   }
 
@@ -59,6 +62,7 @@ class TransactionModel {
       amount: (map['amount'] as num?)?.toDouble(),
       txnType: map['txn_type'] as String?,
       isPriority: (map['is_priority'] as int? ?? 0) == 1,
+      upiReference: map['upi_reference'] as String?,
     );
   }
 
@@ -75,6 +79,7 @@ class TransactionModel {
     double? amount,
     String? txnType,
     bool? isPriority,
+    String? upiReference,
   }) {
     return TransactionModel(
       id: id ?? this.id,
@@ -89,6 +94,7 @@ class TransactionModel {
       amount: amount ?? this.amount,
       txnType: txnType ?? this.txnType,
       isPriority: isPriority ?? this.isPriority,
+      upiReference: upiReference ?? this.upiReference,
     );
   }
 
