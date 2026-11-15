@@ -5,7 +5,9 @@ import 'app_colors.dart';
 /// Centralized Material 3 theme configuration for Prism Engine.
 abstract class AppTheme {
   static ThemeData get darkTheme {
-    final baseTextTheme = GoogleFonts.interTextTheme(ThemeData.dark().textTheme);
+    final baseTextTheme = GoogleFonts.interTextTheme(
+      ThemeData.dark().textTheme,
+    );
 
     return ThemeData(
       useMaterial3: true,
@@ -87,7 +89,7 @@ abstract class AppTheme {
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(10),
           side: const BorderSide(color: AppColors.glassBorder, width: 1),
         ),
       ),

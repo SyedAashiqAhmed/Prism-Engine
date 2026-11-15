@@ -48,18 +48,15 @@ class TxnListTile extends StatelessWidget {
     final fmt = NumberFormat('#,##,##0.00', 'en_IN');
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 7),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: AppColors.glassBorder),
+      padding: const EdgeInsets.symmetric(vertical: 13),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.glassBorder)),
       ),
       child: Row(
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: 34,
+            height: 34,
             decoration: BoxDecoration(
               color: containerColor,
               shape: BoxShape.circle,
@@ -98,26 +95,19 @@ class TxnListTile extends StatelessWidget {
               Text(
                 '${isDebit ? '-' : '+'}₹${fmt.format(amount)}',
                 style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
                   color: colorLight,
                 ),
               ),
-              Container(
-                margin: const EdgeInsets.only(top: 3),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: containerColor,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  isDebit ? 'DEBIT' : 'CREDIT',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                    letterSpacing: 0.8,
-                  ),
+              const SizedBox(height: 4),
+              Text(
+                isDebit ? 'DEBIT' : 'CREDIT',
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                  letterSpacing: 0.8,
                 ),
               ),
             ],

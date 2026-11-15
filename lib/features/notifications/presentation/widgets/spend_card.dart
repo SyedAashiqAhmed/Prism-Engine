@@ -4,9 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../providers/dashboard_provider.dart';
 
-/// Reusable Credit / Debit summary card widget.
-/// Fixed: "Today" pill text now uses Flexible to prevent 28px right overflow
-/// on narrow screens when the formatted amount is long.
+/// Reusable credit/debit summary block for the dashboard.
 class SpendCard extends ConsumerWidget {
   final bool isDebit;
 
@@ -21,37 +19,26 @@ class SpendCard extends ConsumerWidget {
     final containerColor = isDebit
         ? AppColors.debitContainer
         : AppColors.creditContainer;
-    final cardColors = isDebit
-        ? const [Color(0xFF30151A), Color(0xFF1B1114)]
-        : const [Color(0xFF00E599), Color(0xFF00C982)];
     final foregroundColor = isDebit
         ? AppColors.debitLight
-        : const Color(0xFF062017);
+        : AppColors.creditLight;
     final label = isDebit ? 'Total Spent' : 'Total Received';
-    final todayLabel = isDebit ? 'Today' : 'Today';
+    final todayLabel = 'Today';
     final icon = isDebit
         ? Icons.arrow_upward_rounded
         : Icons.arrow_downward_rounded;
     final fmt = NumberFormat('#,##,##0.00', 'en_IN');
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: color.withAlpha(isDebit ? 85 : 0), width: 1),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: cardColors,
+        color: AppColors.surfaceElevated,
+        border: Border(
+          top: BorderSide(color: color, width: 2),
+          bottom: const BorderSide(color: AppColors.glassBorder),
+          left: const BorderSide(color: AppColors.glassBorder),
+          right: const BorderSide(color: AppColors.glassBorder),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: color.withAlpha(24),
-            blurRadius: 18,
-            offset: const Offset(0, 5),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -59,10 +46,10 @@ class SpendCard extends ConsumerWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(7),
+                padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: isDebit ? containerColor : Colors.black.withAlpha(25),
-                  borderRadius: BorderRadius.circular(10),
+                  color: containerColor,
+                  shape: BoxShape.circle,
                 ),
                 child: Icon(icon, color: foregroundColor, size: 16),
               ),
@@ -74,9 +61,8 @@ class SpendCard extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: foregroundColor.withAlpha(210),
-                    letterSpacing: 0.2,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ),
@@ -97,46 +83,23 @@ class SpendCard extends ConsumerWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: foregroundColor,
-                    letterSpacing: -0.5,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                    letterSpacing: -0.4,
                   ),
                 ),
           const SizedBox(height: 8),
-          // ── "Today" pill ─────────────────────────────────────────────
-          // Wrapped in a LayoutBuilder so the pill never exceeds the card
-          // width and never causes a right-side overflow (was 28px).
-          LayoutBuilder(
-            builder: (_, constraints) => Container(
-              // Constrain pill to available card width
-              constraints: BoxConstraints(maxWidth: constraints.maxWidth),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: isDebit ? containerColor : Colors.black.withAlpha(25),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.today_rounded, size: 11, color: foregroundColor),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      state.isLoading
-                          ? '—'
-                          : '$todayLabel: ₹${fmt.format(todayAmount)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: foregroundColor,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+          Text(
+            state.isLoading
+                ? 'Today  —'
+                : '$todayLabel  ₹${fmt.format(todayAmount)}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: foregroundColor,
             ),
           ),
         ],

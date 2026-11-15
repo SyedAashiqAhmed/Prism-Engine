@@ -5,7 +5,7 @@ void main() {
   group('AxioParser Bank SMS & Notification Parsing Tests', () {
     test('HDFC Bank Debit SMS with Avl Bal is parsed correctly', () {
       const sms =
-          'HDFC Bank: Rs 540.00 debited from a/c **4321 on 19-09-26 to SWIGGY. Avl bal: Rs 24,500.00';
+          'HDFC Bank: Rs 540.00 debited from a/c **4321 on 19-09-26 to SWIGGY. Ref 123456789012. Avl bal: Rs 24,500.00';
       final parsed = AxioParser.parse(sms);
 
       expect(parsed, isNotNull);
@@ -17,7 +17,7 @@ void main() {
 
     test('SBI UPI Credit SMS is parsed correctly', () {
       const sms =
-          'Dear SBI User, your A/C 9876 has been credited with Rs 2,500.00 on 19Sep by transfer from JOHN. Avl Bal: Rs 15,200.00';
+          'Dear SBI User, your A/C 9876 has been credited with Rs 2,500.00 on 19Sep by transfer from JOHN. Ref 123456789012. Avl Bal: Rs 15,200.00';
       final parsed = AxioParser.parse(sms);
 
       expect(parsed, isNotNull);
@@ -47,7 +47,7 @@ void main() {
 
     test('ICICI Credit Card Spend with INR and Available Limit', () {
       const sms =
-          'Tranx of INR 1,299.00 spent on ICICI Bank Card ending 1122 at AMAZON on 19-Sep-26. Available limit: INR 45,000.00';
+          'Tranx of INR 1,299.00 spent on ICICI Bank Card ending 1122 at AMAZON on 19-Sep-26. Ref 123456789012. Available limit: INR 45,000.00';
       final parsed = AxioParser.parse(sms);
 
       expect(parsed, isNotNull);
@@ -58,7 +58,7 @@ void main() {
     });
 
     test('Google Pay notification with Rupee symbol ₹', () {
-      const text = 'Paid ₹350.00 to ZOMATO on Google Pay';
+      const text = 'Paid ₹350.00 to ZOMATO on Google Pay. Ref 123456789012';
       final parsed = AxioParser.parse(text);
 
       expect(parsed, isNotNull);
@@ -68,7 +68,8 @@ void main() {
     });
 
     test('Paytm wallet debit SMS is parsed correctly', () {
-      const text = 'Paid Rs 85.00 to Chai Point at Paytm. Bal Rs 120.00';
+      const text =
+          'Paid Rs 85.00 to Chai Point at Paytm. Ref 123456789012. Bal Rs 120.00';
       final parsed = AxioParser.parse(text);
 
       expect(parsed, isNotNull);
@@ -79,7 +80,7 @@ void main() {
 
     test('Credit amount before "has been credited" is classified as CREDIT', () {
       const text =
-          'INR 2,500.00 has been credited to your A/c XX9876. Avl Bal: Rs 15,200';
+          'INR 2,500.00 has been credited to your A/c XX9876. Ref 123456789012. Avl Bal: Rs 15,200';
       final parsed = AxioParser.parse(text);
 
       expect(parsed, isNotNull);
@@ -89,7 +90,7 @@ void main() {
 
     test('Debit amount before "has been debited" is classified as DEBIT', () {
       const text =
-          'Rs. 1,234.50 has been debited from account XX4321. Available balance Rs. 8,765.50';
+          'Rs. 1,234.50 has been debited from account XX4321. Ref 123456789012. Available balance Rs. 8,765.50';
       final parsed = AxioParser.parse(text);
 
       expect(parsed, isNotNull);
@@ -99,7 +100,7 @@ void main() {
 
     test('Available credit limit is not mistaken for the transaction amount', () {
       const text =
-          'Your card ending 1122 was charged INR 399.00 at STORE. Available limit: INR 45,000.00';
+          'Your card ending 1122 was charged INR 399.00 at STORE. Ref 123456789012. Available limit: INR 45,000.00';
       final parsed = AxioParser.parse(text);
 
       expect(parsed, isNotNull);
@@ -108,7 +109,8 @@ void main() {
     });
 
     test('Cashback credit is not discarded as promotional text', () {
-      const text = 'Cashback earned: Rs 25.00 credited to your wallet';
+      const text =
+          'Cashback earned: Rs 25.00 credited to your wallet. Ref 123456789012';
       final parsed = AxioParser.parse(text);
 
       expect(parsed, isNotNull);
@@ -118,7 +120,7 @@ void main() {
 
     test('Uses the first amount-direction pair when both are mentioned', () {
       const text =
-          'Rs 500.00 credited to your account; next payment of Rs 120.00 debited';
+          'Rs 500.00 credited to your account; Ref 123456789012. next payment of Rs 120.00 debited';
       final parsed = AxioParser.parse(text);
 
       expect(parsed, isNotNull);
@@ -127,7 +129,7 @@ void main() {
     });
 
     test('Notification body direction takes precedence over a stale title', () {
-      const text = 'Rs 500.00 credited to your account';
+      const text = 'Rs 500.00 credited to your account. Ref 123456789012';
       final parsed = AxioParser.parse(text, title: 'Debit alert');
 
       expect(parsed, isNotNull);
@@ -140,6 +142,22 @@ void main() {
 
       expect(AxioParser.parse(text), isNull);
     });
+
+    test(
+      'ignores transaction-shaped notifications without a valid reference',
+      () {
+        expect(
+          AxioParser.parse(
+            'Beneficiary account added. Rs 500.00 credited to your account',
+          ),
+          isNull,
+        );
+        expect(
+          AxioParser.parse('Rs 500.00 debited from account XX4321. Ref 1234'),
+          isNull,
+        );
+      },
+    );
 
     test('Blacklist Filter: OTP SMS returns null', () {
       const sms =

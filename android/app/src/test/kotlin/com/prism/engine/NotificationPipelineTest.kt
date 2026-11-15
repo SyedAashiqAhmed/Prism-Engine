@@ -23,7 +23,7 @@ class NotificationPipelineTest {
     @Test
     fun parserUsesTitleWhenBodyHasNoTransactionAndCapturesIdentity() {
         val parsed = TransactionParser.parse(
-            "Paid Rs 500 to Zomato from card ending 4321",
+            "Paid Rs 500 to Zomato from card ending 4321. Ref 123456789012",
             "Payment notification",
         )
 
@@ -31,7 +31,7 @@ class NotificationPipelineTest {
         assertEquals(500.0, parsed?.amount ?: 0.0, 0.0)
         assertEquals("Zomato", parsed?.merchant)
         assertEquals("4321", parsed?.accountLast4)
-        assertNull(parsed?.upiReference)
+        assertEquals("123456789012", parsed?.upiReference)
     }
 
     @Test
@@ -53,6 +53,22 @@ class NotificationPipelineTest {
             TransactionParser.parse(
                 "HDFC Bank",
                 "This Diwali, Shop, Collect & Win! Get assured cashback up to Rs.1,001",
+            ),
+        )
+    }
+
+    @Test
+    fun transactionWithoutValidReferenceIsIgnored() {
+        assertNull(
+            TransactionParser.parse(
+                "Bank",
+                "Beneficiary account added. Rs 500 credited to your account",
+            ),
+        )
+        assertNull(
+            TransactionParser.parse(
+                "Bank",
+                "Rs 500 debited from account 4321. Ref 1234",
             ),
         )
     }

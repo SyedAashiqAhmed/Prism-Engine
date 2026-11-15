@@ -71,6 +71,7 @@ class AxioParser {
       r'(?:upi\s*(?:transaction\s*)?(?:reference|ref)|transaction\s*(?:reference|ref)|\brrn\b|\bref\b)\s*(?:no\.?|number|id)?\s*[:#.\-]?\s*(\d{8,20})\b',
       caseSensitive: false,
     ).firstMatch(fullText);
+    if (referenceMatch == null) return null;
 
     // ── 4. Extract Merchant Name ─────────────────────────────────────────
     // Handles "Paid to Swiggy", "at Amazon", "VPA swiggy@okaxis",
@@ -125,7 +126,7 @@ class AxioParser {
       rawTextNoBal,
       type: 'CREDIT',
       keywords:
-        r'credit(?:ed)?(?!\s+card)|received|deposited|refund(?:ed)?|reversed?|added',
+          r'credit(?:ed)?(?!\s+card)|received|deposited|refund(?:ed)?|reversed?|added',
     );
 
     // Prefer explicit transaction wording in the notification body over a
@@ -160,7 +161,7 @@ class AxioParser {
       amount: transaction.amount,
       merchant: merchant,
       accountLast4: accountLast4,
-      upiReference: referenceMatch?.group(1),
+      upiReference: referenceMatch.group(1),
     );
   }
 

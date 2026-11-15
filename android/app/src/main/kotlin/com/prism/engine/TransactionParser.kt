@@ -54,6 +54,8 @@ internal object TransactionParser {
         ) {
             return null
         }
+        val upiReference = referencePattern.find(text)?.groupValues?.getOrNull(1)
+            ?: return null
         val candidates = mutableListOf<Pair<Int, ParsedTransaction>>()
 
         amountBeforeDirection.findAll(text).forEach { match ->
@@ -70,7 +72,6 @@ internal object TransactionParser {
         val selected = candidates.minByOrNull { it.first }?.second ?: return null
         val merchant = merchantPattern.find(text)?.groupValues?.getOrNull(1)?.trim()
         val accountLast4 = accountPattern.find(text)?.groupValues?.getOrNull(1)
-        val upiReference = referencePattern.find(text)?.groupValues?.getOrNull(1)
         return selected.copy(
             merchant = merchant?.takeIf { it.isNotBlank() },
             accountLast4 = accountLast4,

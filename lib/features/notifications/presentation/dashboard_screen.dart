@@ -144,20 +144,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
           slivers: [
             // ─── App Bar ───────────────────────────────────────────────
             SliverAppBar(
-              expandedHeight: 126,
+              expandedHeight: 112,
               pinned: true,
               backgroundColor: AppColors.background,
               elevation: 0,
               flexibleSpace: FlexibleSpaceBar(
                 background: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Color(0xFF10251C), AppColors.background],
-                    ),
-                  ),
-                  padding: const EdgeInsets.fromLTRB(20, 52, 16, 0),
+                  padding: const EdgeInsets.fromLTRB(20, 50, 16, 0),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
@@ -177,12 +170,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                           ),
                           const SizedBox(height: 5),
                           const Text(
-                            'EXPENSE TRACKER',
+                            'PERSONAL FINANCE / LIVE CAPTURE',
                             style: TextStyle(
-                              fontSize: 9,
+                              fontSize: 8,
                               color: AppColors.credit,
                               fontWeight: FontWeight.w700,
-                              letterSpacing: 1.1,
+                              letterSpacing: 1.2,
                             ),
                           ),
                         ],
@@ -195,20 +188,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                             builder: (_) => const AnalyticsScreen(),
                           ),
                         ),
-                        icon: const Icon(
-                          Icons.analytics_outlined,
-                          color: AppColors.credit,
-                          size: 20,
-                        ),
+                        icon: const Icon(Icons.analytics_outlined, size: 19),
                         tooltip: 'Open analytics',
                         visualDensity: VisualDensity.compact,
                       ),
                       IconButton(
                         onPressed: _refreshDashboard,
                         icon: const Icon(Icons.refresh_rounded, size: 19),
-                        color: AppColors.background,
+                        color: AppColors.credit,
                         style: IconButton.styleFrom(
-                          backgroundColor: AppColors.credit,
+                          side: const BorderSide(
+                            color: AppColors.glassBorderStrong,
+                          ),
                         ),
                         tooltip: 'Refresh data',
                         visualDensity: VisualDensity.compact,
@@ -244,8 +235,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                   Row(
                     children: [
                       const Icon(
-                        Icons.calendar_month_rounded,
-                        size: 14,
+                        Icons.today_outlined,
+                        size: 15,
                         color: AppColors.credit,
                       ),
                       const SizedBox(width: 6),
@@ -253,8 +244,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
                         dateLabel,
                         style: const TextStyle(
                           color: AppColors.textSecondary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
@@ -337,75 +328,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
 // ─────────────────────────────────────────────────────────────────────────────
 // Live Pill Indicator
 // ─────────────────────────────────────────────────────────────────────────────
-class _LivePillWidget extends StatefulWidget {
-  @override
-  State<_LivePillWidget> createState() => _LivePillWidgetState();
-}
-
-class _LivePillWidgetState extends State<_LivePillWidget>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _pulse;
-  late Animation<double> _anim;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulse = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat(reverse: true);
-    _anim = Tween<double>(
-      begin: 0.4,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _pulse.dispose();
-    super.dispose();
-  }
-
+class _LivePillWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _anim,
-      builder: (_, child) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        decoration: BoxDecoration(
-          color: AppColors.creditContainer,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: AppColors.credit.withAlpha((_anim.value * 180).round()),
-            width: 1,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: const BoxDecoration(
+            color: AppColors.credit,
+            shape: BoxShape.circle,
           ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                color: AppColors.credit.withAlpha((_anim.value * 255).round()),
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 5),
-            Text(
-              'LIVE',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: AppColors.creditLight.withAlpha(
-                  (_anim.value * 255).round(),
-                ),
-                letterSpacing: 1,
-              ),
-            ),
-          ],
+        const SizedBox(width: 5),
+        const Text(
+          'LIVE',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: AppColors.creditLight,
+            letterSpacing: 1,
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -545,21 +492,19 @@ class _DashboardCategoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tileColor = category.name == 'Unclassified'
-        ? const Color(0xFF52605A)
-        : category.color;
     return Material(
-      color: tileColor,
-      borderRadius: BorderRadius.circular(12),
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(10),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(category.icon, color: Colors.black87, size: 19),
+              Icon(category.icon, color: category.color, size: 19),
               const SizedBox(height: 5),
               Text(
                 _label,
@@ -567,7 +512,7 @@ class _DashboardCategoryTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: Colors.black87,
+                  color: AppColors.textSecondary,
                   fontSize: 9,
                   fontWeight: FontWeight.w700,
                 ),
@@ -576,8 +521,8 @@ class _DashboardCategoryTile extends StatelessWidget {
               Text(
                 '$count',
                 style: const TextStyle(
-                  color: Colors.black87,
-                  fontSize: 10,
+                  color: AppColors.textPrimary,
+                  fontSize: 11,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -605,10 +550,14 @@ class _MoreCategoriesTile extends StatelessWidget {
         child: const Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.add_rounded, color: AppColors.textSecondary, size: 20),
+            Icon(
+              Icons.arrow_forward_rounded,
+              color: AppColors.textSecondary,
+              size: 20,
+            ),
             SizedBox(height: 5),
             Text(
-              'More',
+              'All',
               style: TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 9,
@@ -637,15 +586,15 @@ class _EodSummaryBanner extends StatelessWidget {
     final isPositive = net >= 0;
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.fromLTRB(16, 15, 16, 16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.aiViolet.withAlpha(60), AppColors.surfaceElevated],
+        color: AppColors.surface,
+        border: const Border(
+          left: BorderSide(color: AppColors.credit, width: 2),
+          top: BorderSide(color: AppColors.glassBorder),
+          right: BorderSide(color: AppColors.glassBorder),
+          bottom: BorderSide(color: AppColors.glassBorder),
         ),
-        border: Border.all(color: AppColors.glassBorderStrong, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -653,18 +602,18 @@ class _EodSummaryBanner extends StatelessWidget {
           Row(
             children: [
               const Icon(
-                Icons.nights_stay_rounded,
-                color: AppColors.aiVioletLight,
-                size: 16,
+                Icons.insights_outlined,
+                color: AppColors.creditLight,
+                size: 17,
               ),
               const SizedBox(width: 6),
               Text(
-                'End of Day Summary · ${DateFormat('d MMM').format(now)}',
+                'TODAY IN REVIEW · ${DateFormat('d MMM').format(now)}',
                 style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.aiVioletLight,
-                  letterSpacing: 0.3,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.creditLight,
+                  letterSpacing: 1.0,
                 ),
               ),
             ],
@@ -770,20 +719,19 @@ class _FilterTabBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 38,
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.glassBorder),
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: AppColors.glassBorder),
+          bottom: BorderSide(color: AppColors.glassBorder),
+        ),
       ),
       child: TabBar(
         controller: controller,
-        indicator: BoxDecoration(
-          color: AppColors.aiViolet,
-          borderRadius: BorderRadius.circular(10),
+        indicator: const UnderlineTabIndicator(
+          borderSide: BorderSide(color: AppColors.credit, width: 2),
         ),
         indicatorSize: TabBarIndicatorSize.tab,
-        indicatorPadding: const EdgeInsets.all(3),
-        labelColor: Colors.white,
+        labelColor: AppColors.textPrimary,
         unselectedLabelColor: AppColors.textMuted,
         labelStyle: const TextStyle(
           fontSize: 12,
@@ -817,11 +765,9 @@ class _TransactionList extends StatelessWidget {
         children: List.generate(
           5,
           (_) => Container(
-            margin: const EdgeInsets.only(bottom: 8),
             height: 66,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(14),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: AppColors.glassBorder)),
             ),
           ),
         ),
@@ -836,12 +782,13 @@ class _TransactionList extends StatelessWidget {
 
     if (rows.isEmpty) {
       return Container(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 34),
         alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.glassBorder),
+        decoration: const BoxDecoration(
+          border: Border(
+            top: BorderSide(color: AppColors.glassBorder),
+            bottom: BorderSide(color: AppColors.glassBorder),
+          ),
         ),
         child: Column(
           children: [
