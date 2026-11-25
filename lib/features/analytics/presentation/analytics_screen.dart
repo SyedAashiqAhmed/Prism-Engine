@@ -113,38 +113,51 @@ class _AnalyticsBody extends StatelessWidget {
             onNext: onNextMonth,
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _MetricCard(
-                  label: 'Total Spent',
-                  value: money.format(data.spent),
-                  color: AppColors.debit,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _MetricCard(
-                  label: 'Received',
-                  value: money.format(data.received),
-                  color: AppColors.credit,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _MetricCard(
-                  label: 'Net Savings',
-                  value: money.format(data.savings),
-                  color: data.savings >= 0 ? AppColors.credit : AppColors.debit,
-                ),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth < 430 ? 2 : 3;
+              final gap = 8.0;
+              final cardWidth =
+                  (constraints.maxWidth - (columns - 1) * gap) / columns;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  SizedBox(
+                    width: cardWidth,
+                    child: _MetricCard(
+                      label: 'Total Spent',
+                      value: money.format(data.spent),
+                      color: AppColors.debit,
+                    ),
+                  ),
+                  SizedBox(
+                    width: cardWidth,
+                    child: _MetricCard(
+                      label: 'Received',
+                      value: money.format(data.received),
+                      color: AppColors.credit,
+                    ),
+                  ),
+                  SizedBox(
+                    width: cardWidth,
+                    child: _MetricCard(
+                      label: 'Net Savings',
+                      value: money.format(data.savings),
+                      color: data.savings >= 0
+                          ? AppColors.credit
+                          : AppColors.debit,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 14),
           _Panel(
             title: 'Monthly Overview',
             subtitle: 'Expenses and income trend',
-            child: SizedBox(height: 190, child: _MonthlyChart(data: data)),
+            child: SizedBox(height: 210, child: _MonthlyChart(data: data)),
           ),
           const SizedBox(height: 14),
           _Panel(
@@ -152,13 +165,13 @@ class _AnalyticsBody extends StatelessWidget {
             subtitle: data.unclassified > 0
                 ? '${data.unclassifiedPercent.toStringAsFixed(0)}% remains unclassified'
                 : 'All captured spending has a category',
-            child: SizedBox(height: 230, child: _CategoryChart(data: data)),
+            child: _CategoryChart(data: data),
           ),
           const SizedBox(height: 14),
           _Panel(
             title: 'Daily Spending',
             subtitle: 'Tap a day to compare your spending pattern',
-            child: SizedBox(height: 185, child: _DailyChart(data: data)),
+            child: SizedBox(height: 205, child: _DailyChart(data: data)),
           ),
           const SizedBox(height: 14),
           _Panel(
@@ -422,93 +435,97 @@ class _CategoryChart extends StatelessWidget {
     }
     final colors = [
       AppColors.debit,
-      const Color(0xFFFFC43D),
-      const Color(0xFF3B9CFF),
+      AppColors.warning,
+      AppColors.cyanAccent,
       AppColors.credit,
-      AppColors.aiVioletLight,
-      const Color(0xFFE879F9),
+      AppColors.creditLight,
       AppColors.textMuted,
     ];
-    return Row(
-      children: [
-        Expanded(
-          flex: 5,
+    final categories = data.categories.take(7).toList();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 480;
+        final chart = SizedBox(
+          width: compact ? 170 : 190,
+          height: compact ? 170 : 190,
           child: PieChart(
             PieChartData(
               sectionsSpace: 2,
-              centerSpaceRadius: 38,
-              sections: data.categories.take(7).toList().asMap().entries.map((
-                entry,
-              ) {
+              centerSpaceRadius: compact ? 42 : 48,
+              sections: categories.asMap().entries.map((entry) {
                 final item = entry.value;
                 return PieChartSectionData(
                   value: item.amount,
                   color: colors[entry.key % colors.length],
-                  radius: 30,
+                  radius: compact ? 28 : 32,
                   showTitle: false,
                 );
               }).toList(),
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          flex: 7,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: data.categories.take(7).toList().asMap().entries.map((
-              entry,
-            ) {
-              final item = entry.value;
-              final percent = data.spent == 0
-                  ? 0
-                  : item.amount / data.spent * 100;
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: colors[entry.key % colors.length],
-                        shape: BoxShape.circle,
-                      ),
+        );
+        final legend = Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: categories.asMap().entries.map((entry) {
+            final item = entry.value;
+            final percent = data.spent == 0
+                ? 0
+                : item.amount / data.spent * 100;
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: colors[entry.key % colors.length],
+                      shape: BoxShape.circle,
                     ),
-                    const SizedBox(width: 7),
-                    Expanded(
-                      child: Text(
-                        item.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '${percent.toStringAsFixed(0)}%',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                    const SizedBox(width: 7),
-                    Text(
-                      _money(item.amount),
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      item.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondary,
                       ),
                     ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-      ],
+                  ),
+                  Text(
+                    '${percent.toStringAsFixed(0)}%',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                  const SizedBox(width: 7),
+                  Text(
+                    _money(item.amount),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        );
+        if (compact) {
+          return Column(children: [chart, const SizedBox(height: 8), legend]);
+        }
+        return Row(
+          children: [
+            chart,
+            const SizedBox(width: 18),
+            Expanded(child: legend),
+          ],
+        );
+      },
     );
   }
 }
@@ -533,17 +550,33 @@ class _DailyChart extends StatelessWidget {
           rightTitles: const AxisTitles(
             sideTitles: SideTitles(showTitles: false),
           ),
-          leftTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 34,
+              interval: maxValue <= 0 ? 250 : maxValue / 2,
+              getTitlesWidget: (value, meta) => Text(
+                _compact(value),
+                style: const TextStyle(fontSize: 9, color: AppColors.textMuted),
+              ),
+            ),
           ),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
+              reservedSize: 22,
               interval: days > 15 ? 5 : 1,
-              getTitlesWidget: (value, meta) => Text(
-                '${value.toInt()}',
-                style: const TextStyle(fontSize: 9, color: AppColors.textMuted),
-              ),
+              getTitlesWidget: (value, meta) {
+                final day = value.toInt();
+                if (day < 1 || day > days) return const SizedBox.shrink();
+                return Text(
+                  '$day',
+                  style: const TextStyle(
+                    fontSize: 9,
+                    color: AppColors.textMuted,
+                  ),
+                );
+              },
             ),
           ),
         ),
@@ -554,8 +587,8 @@ class _DailyChart extends StatelessWidget {
             barRods: [
               BarChartRodData(
                 toY: data.dailySpend[index + 1] ?? 0,
-                color: AppColors.aiVioletLight,
-                width: 5,
+                color: AppColors.creditLight,
+                width: 6,
                 borderRadius: BorderRadius.circular(3),
               ),
             ],
